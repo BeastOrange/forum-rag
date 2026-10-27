@@ -20,14 +20,14 @@ def search_forum_records(
     top_k: int = 5,
     embedding_backend: EmbeddingBackend | None = None,
 ) -> list[dict[str, Any]]:
-    rows = _forum_candidate_rows(conn, query, top_k=max(top_k * 20, 80)) or [
-        dict(row) for row in _forum_detail_rows(conn)
-    ]
+    if top_k <= 0 or not query.strip():
+        return []
+    rows = _forum_candidate_rows(conn, query, top_k=max(top_k * 20, 80))
     if not rows or top_k <= 0:
         return []
 
     backend = _backend(conn, embedding_backend)
-    hits = ForumSearcher(rows, embedding_backend=backend).search(query=query, top_k=max(top_k * 3, top_k))
+    hits = ForumSearcher(rows, embedding_backend=backend).search(query=query, top_k=len(rows))
     meta = {row["topic_id"]: row for row in rows}
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -49,12 +49,20 @@ def search_knowledge_records(
     include_drafts: bool = False,
     embedding_backend: EmbeddingBackend | None = None,
 ) -> list[dict[str, Any]]:
+    if top_k <= 0 or not query.strip():
+        return []
+    from wq_forum_rag.knowledge_quality import eligible_knowledge_slugs
+
+    eligible = None if include_drafts else eligible_knowledge_slugs(conn)
+    if eligible == set():
+        return []
     pages = _knowledge_candidate_rows(
         conn,
         query,
         top_k=max(top_k * 20, 80),
         include_drafts=include_drafts,
-    ) or _knowledge_detail_rows(conn, include_drafts=include_drafts)
+        eligible=eligible,
+    )
     if not pages or top_k <= 0:
         return []
 
@@ -73,7 +81,7 @@ def search_knowledge_records(
         embedding_backend=_backend(conn, embedding_backend),
         dense_weight=0.45,
         lexical_weight=0.55,
-    ).search(query=query, top_k=max(top_k * 3, top_k))
+    ).search(query=query, top_k=len(pages))
     return _knowledge_results(hits, pages, _knowledge_link_counts(conn), top_k)
 
 
@@ -84,7 +92,9 @@ def search_doc_records(
     top_k: int = 5,
     embedding_backend: EmbeddingBackend | None = None,
 ) -> list[dict[str, Any]]:
-    rows = _doc_candidate_rows(conn, query, top_k=max(top_k * 20, 80)) or _doc_detail_rows(conn)
+    if top_k <= 0 or not query.strip():
+        return []
+    rows = _doc_candidate_rows(conn, query, top_k=max(top_k * 20, 80))
     if not rows or top_k <= 0:
         return []
 
@@ -103,7 +113,7 @@ def search_doc_records(
         embedding_backend=_backend(conn, embedding_backend),
         dense_weight=0.55,
         lexical_weight=0.45,
-    ).search(query=query, top_k=max(top_k * 3, top_k))
+    ).search(query=query, top_k=len(rows))
     meta = {row["slug"]: row for row in rows}
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -129,9 +139,13 @@ def search_doc_records(
 def _backend(conn: sqlite3.Connection, embedding_backend: EmbeddingBackend | None):
     if isinstance(embedding_backend, CachedEmbeddingBackend):
         return embedding_backend
+    from wq_forum_rag.search_index import _table_exists
+
     db_path = _db_path(conn)
-    if db_path:
-        return CachedEmbeddingBackend(db_path, backend=embedding_backend)
+    if db_path and _table_exists(conn, "document_fts"):
+        return CachedEmbeddingBackend(
+            db_path, backend=embedding_backend, writable=embedding_backend is not None
+        )
     return embedding_backend or build_embedding_backend()
 
 
@@ -153,27 +167,18 @@ def _forum_detail_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def _forum_candidate_rows(conn: sqlite3.Connection, query: str, *, top_k: int) -> list[dict[str, Any]]:
-    from wq_forum_rag.search_index import _fts_query, _table_exists
+    from wq_forum_rag.search_index import candidate_ids
 
-    match_query = _fts_query(query)
-    if not match_query or not _table_exists(conn, "document_fts"):
+    ids = candidate_ids(conn, query, kind="forum_chunk", limit=top_k)
+    if not ids:
         return []
-    try:
-        rows = conn.execute(
-            """
-            SELECT c.chunk_id, c.topic_id, c.community_id, c.content, t.title,
-                   t.community_title, t.author, t.created_at, t.url, t.vote_num, t.comment_count
-            FROM document_fts
-            JOIN chunks AS c ON c.chunk_id = document_fts.record_id
-            JOIN topics AS t ON t.topic_id = c.topic_id
-            WHERE kind = 'forum_chunk' AND document_fts MATCH ?
-            ORDER BY rank
-            LIMIT ?
-            """,
-            (match_query, top_k),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return []
+    placeholders = ",".join("?" for _ in ids)
+    rows = conn.execute(f"""
+        SELECT c.chunk_id, c.topic_id, c.community_id, c.content, t.title,
+               t.community_title, t.author, t.created_at, t.url, t.vote_num, t.comment_count
+        FROM chunks c JOIN topics t ON t.topic_id = c.topic_id
+        WHERE c.chunk_level = 1 AND c.chunk_id IN ({placeholders})
+    """, ids).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -194,25 +199,28 @@ def _knowledge_detail_rows(conn: sqlite3.Connection, *, include_drafts: bool) ->
     return [dict(row) for row in rows]
 
 
-def _knowledge_candidate_rows(conn: sqlite3.Connection, query: str, *, top_k: int, include_drafts: bool):
-    from wq_forum_rag.search_index import _fts_query, _table_exists
+def _knowledge_candidate_rows(conn: sqlite3.Connection, query: str, *, top_k: int,
+                              include_drafts: bool, eligible: set[str] | None = None):
+    from wq_forum_rag.search_index import candidate_ids
 
-    match_query = _fts_query(query)
-    if not match_query or not _table_exists(conn, "document_fts") or not _table_exists(conn, "knowledge_pages"):
+    # Filter trust before truncating: many stale/conflicted high-ranking pages
+    # must not crowd an eligible page out of the candidate pool. Only identifiers
+    # are over-fetched; text scoring remains bounded by top_k.
+    # candidate_ids reserves half its budget for Chinese literal matches. Allow
+    # the FTS half to hold every published identifier before trust filtering.
+    limit = top_k if eligible is None else 2 * conn.execute(
+        "SELECT COUNT(*) FROM knowledge_pages WHERE status='published'"
+    ).fetchone()[0]
+    ids = candidate_ids(conn, query, kind="knowledge_page", limit=limit, include_drafts=include_drafts)
+    if eligible is not None:
+        ids = [slug for slug in ids if slug in eligible][:top_k]
+    if not ids:
         return []
-    rows = conn.execute(
-        """
-        SELECT knowledge_pages.slug, knowledge_pages.title, knowledge_pages.summary,
-               knowledge_pages.body, knowledge_pages.status, knowledge_pages.confidence
-        FROM document_fts
-        JOIN knowledge_pages ON knowledge_pages.slug = document_fts.record_id
-        WHERE kind = 'knowledge_page' AND document_fts MATCH ?
-          AND (? OR knowledge_pages.status = 'published')
-        ORDER BY rank
-        LIMIT ?
-        """,
-        (match_query, int(include_drafts), top_k),
-    ).fetchall()
+    placeholders = ",".join("?" for _ in ids)
+    rows = conn.execute(f"""
+        SELECT slug, title, summary, body, status, confidence FROM knowledge_pages
+        WHERE slug IN ({placeholders}) AND (? OR status = 'published')
+    """, (*ids, int(include_drafts))).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -233,26 +241,17 @@ def _doc_detail_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 
 def _doc_candidate_rows(conn: sqlite3.Connection, query: str, *, top_k: int) -> list[dict[str, Any]]:
-    from wq_forum_rag.search_index import _fts_query, _table_exists
+    from wq_forum_rag.search_index import candidate_ids
 
-    match_query = _fts_query(query)
-    if not match_query or not _table_exists(conn, "document_fts") or not _table_exists(conn, "doc_chunks"):
+    ids = candidate_ids(conn, query, kind="doc_chunk", limit=top_k)
+    if not ids:
         return []
-    try:
-        rows = conn.execute(
-            """
-            SELECT c.chunk_id, c.slug, c.content, d.title, d.source_path
-            FROM document_fts
-            JOIN doc_chunks AS c ON c.chunk_id = document_fts.record_id
-            JOIN documents AS d ON d.slug = c.slug
-            WHERE kind = 'doc_chunk' AND document_fts MATCH ?
-            ORDER BY rank
-            LIMIT ?
-            """,
-            (match_query, top_k),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return []
+    placeholders = ",".join("?" for _ in ids)
+    rows = conn.execute(f"""
+        SELECT c.chunk_id, c.slug, c.content, d.title, d.source_path
+        FROM doc_chunks c JOIN documents d ON d.slug = c.slug
+        WHERE c.chunk_id IN ({placeholders})
+    """, ids).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -272,7 +271,10 @@ def _knowledge_link_counts(conn: sqlite3.Connection) -> dict[str, int]:
 
     if not _table_exists(conn, "knowledge_links"):
         return {}
-    rows = conn.execute("SELECT target_slug, COUNT(*) AS link_count FROM knowledge_links GROUP BY target_slug").fetchall()
+    rows = conn.execute(
+        "SELECT target_slug, COUNT(*) AS link_count FROM knowledge_links "
+        "WHERE relation_type IN ('supports', 'refines') GROUP BY target_slug"
+    ).fetchall()
     return {str(row["target_slug"]): int(row["link_count"]) for row in rows}
 
 

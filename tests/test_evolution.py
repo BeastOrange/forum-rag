@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -130,11 +131,18 @@ def test_evolution_context_and_auto_publish_flow(tmp_path: Path) -> None:
         ),
         source_topic_ids=["t1", "t2"],
         confidence=0.92,
+        source_evidence=[
+            {"topic_id": "t1", "claim": "Test decay", "excerpt": "Alpha decay should be tested"},
+            {"topic_id": "t2", "claim": "Reduce exposure", "excerpt": "Subindustry neutralization can reduce sector exposure"},
+        ],
         db=str(db_path),
     )
 
-    assert proposed["auto_published"] is True
-    assert proposed["page"]["status"] == "published"
+    assert proposed["auto_published"] is False
+    assert proposed["page"]["status"] == "draft"
+    service = EvolutionService(db_path)
+    service.review_knowledge_page("alpha/neutralization-decay", "reviewed", note="Evidence checked")
+    assert service.publish_knowledge_page("alpha/neutralization-decay")["published"]
     assert {item["topic_id"] for item in proposed["page"]["sources"]} == {"t1", "t2"}
 
     results = search_knowledge("sector neutralization decay", db=str(db_path), top_k=1)
@@ -149,7 +157,7 @@ def test_evolution_context_and_auto_publish_flow(tmp_path: Path) -> None:
         ["knowledge-lint", "--db", str(db_path), "--slug", "alpha/neutralization-decay"],
     )
     assert lint_result.exit_code == 0
-    assert '"blocking_count": 0' in lint_result.stdout
+    assert '"blocking_count": 0' in re.sub(r"\x1b\[[0-9;]*m", "", lint_result.stdout)
 
     search_result = CliRunner().invoke(
         app,
@@ -226,6 +234,7 @@ def test_graph_query_and_wiki_export(tmp_path: Path) -> None:
         summary="Neutralization settings should be evaluated with alpha decay evidence.",
         body="Use original forum evidence when deciding whether subindustry neutralization fits.",
         source_topic_ids=["t1"],
+        source_evidence=[{"topic_id": "t1", "claim": "Test decay", "excerpt": "Alpha decay should be tested"}],
         confidence=0.9,
     )
     service.propose_knowledge_page(
@@ -234,6 +243,7 @@ def test_graph_query_and_wiki_export(tmp_path: Path) -> None:
         summary="Decay checks should preserve original alpha context before comparison.",
         body="Compare decay behavior with cited neutralization evidence before publishing conclusions.",
         source_topic_ids=["t2"],
+        source_evidence=[{"topic_id": "t2", "claim": "Reduce exposure", "excerpt": "Subindustry neutralization can reduce sector exposure"}],
         confidence=0.91,
         links=[
             {
@@ -243,6 +253,10 @@ def test_graph_query_and_wiki_export(tmp_path: Path) -> None:
             }
         ],
     )
+
+    for slug in ("alpha/neutralization-guide", "alpha/decay-checklist"):
+        service.review_knowledge_page(slug, "reviewed", note="Evidence checked")
+        assert service.publish_knowledge_page(slug)["published"]
 
     graph = graph_query("alpha/decay-checklist", db=str(db_path), depth=1)
     assert {node["slug"] for node in graph["nodes"]} == {

@@ -479,14 +479,21 @@ def test_knowledge_and_docs_can_read_during_immediate_write_transaction(tmp_path
     assert runner.invoke(app, ["ingest-docs", str(docs_dir), "--db", str(db_path), "--rebuild"]).exit_code == 0
     from wq_forum_rag.evolution import EvolutionService
 
-    EvolutionService(db_path).propose_knowledge_page(
+    service = EvolutionService(db_path)
+    service.propose_knowledge_page(
         slug="alpha/guide",
         title="Alpha guide",
         summary="Summary with enough length for a published page.",
         body="Body with enough content for a published page linked to topic t1.",
         source_topic_ids=["t1"],
         confidence=0.9,
+        source_evidence=[{
+            "topic_id": "t1", "claim": "Decay is discussed with neutralization",
+            "excerpt": "Alpha decay and neutralization notes.",
+        }],
     )
+    service.review_knowledge_page("alpha/guide", "reviewed", note="Checked the cited excerpt")
+    assert service.publish_knowledge_page("alpha/guide")["published"]
     monkeypatch.setenv("WQ_FORUM_RAG_AUTO_REFRESH", "0")
 
     conn = sqlite3.connect(db_path)

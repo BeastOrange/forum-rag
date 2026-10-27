@@ -199,7 +199,8 @@ Use these tools based on the user intent:
 - `find_by_exact(value, community=None, top_k=5)`: exact topic IDs, URLs, operator names, error messages, field names, and exact phrases on the forum.
 - `get_post(topic_id)`: retrieve full context for a cited or promising forum topic.
 - `related_posts(topic_id, top_k=5)`: expand from one useful topic to nearby topics.
-- `propose_knowledge_page(...)`: save reusable knowledge with source topic IDs.
+- `propose_knowledge_page(..., source_evidence=[...])`: save a draft with source IDs, claims, and verbatim evidence excerpts.
+- `review_knowledge_page(slug, action, note, replacement_slug=None)`: explicitly record review, request review, or archive with a reason. Actions: `reviewed`, `needs_review`, `archived`.
 - `lint_knowledge(slug=...)`: check whether a knowledge page has blockers or warnings.
 - `publish_knowledge_page(slug)`: manually publish a draft after lint blockers are resolved.
 - `link_knowledge_pages(source_slug, target_slug, relation_type, ...)`: add graph relations between knowledge pages.
@@ -246,18 +247,27 @@ propose_knowledge_page(
   source_topic_ids,
   confidence,
   links=None,
-  auto_publish=True
+  auto_publish=False,
+  source_evidence=[{"topic_id": "source-id", "claim": "Supported claim", "excerpt": "verbatim source excerpt"}]
 )
 ```
 
 Use `confidence >= 0.85` only when the key claims are directly supported by cited forum posts. Lower-confidence pages should stay as drafts.
 
-Automatic publishing is allowed only when:
+Proposals always remain drafts until explicitly reviewed. `auto_publish` is retained for call compatibility and cannot bypass review. A high confidence value is not proof of correctness.
 
-- source topic IDs exist,
-- confidence is at least `0.85`,
-- no `conflicts_with` relation blocks publishing,
-- lint does not report blocking issues.
+For each cited topic, provide `source_evidence` entries with `topic_id`, `claim`, and a verbatim `excerpt` from its title, body, or comment text. The system records the source content hash. A located excerpt establishes where the evidence is; the reviewer must judge whether it supports the claim and covers the page's important conclusions.
+
+After checking support, scope, and conflicting evidence, call:
+
+```text
+review_knowledge_page(slug="the/page-slug", action="reviewed", note="What was checked")
+publish_knowledge_page(slug="the/page-slug")
+```
+
+Default search excludes unreviewed legacy pages, changed or missing evidence, both ends of conflicts, and pages whose explicit `depends_on` dependencies are ineligible. `related_to` is not a dependency. Read-only calls do not migrate old schemas. To review legacy pages, re-propose them with current evidence first.
+
+Archive with `review_knowledge_page(slug, action="archived", note="Reason", replacement_slug="optional/replacement")`. Preserve the source and history; do not rewrite descendants, replace by recency alone, or remove knowledge solely because nobody queried it.
 
 After proposing a page, call:
 
@@ -265,7 +275,7 @@ After proposing a page, call:
 lint_knowledge(slug="the/page-slug")
 ```
 
-If the page is useful but remains a draft because confidence is low, mention that it was saved as draft rather than treating it as authoritative.
+Report drafts as drafts. A proposal, source link, or confidence value must not be presented as an approved knowledge page.
 
 ## Knowledge Page Style
 
@@ -298,7 +308,9 @@ Use these relation types consistently:
 - `related_to`: nearby or associated concept.
 - `supports`: source or page supports another page.
 - `refines`: more specific guidance or improved version.
-- `conflicts_with`: content contradicts another page and should block auto-publish.
+- `conflicts_with`: content contradicts another page and excludes both endpoints from trusted retrieval until resolved.
+- `depends_on`: this source page relies on the target page; invalidation propagates to the source.
+- `superseded_by`: an archived page identifies its replacement.
 
 When you find possible contradictions, do not silently overwrite old knowledge. Add or propose a `conflicts_with` relation, keep the new page as draft, and explain the uncertainty.
 
@@ -319,7 +331,7 @@ Follow these boundaries:
 - Do not claim a fact is supported unless it appears in `published_knowledge` or `forum_evidence`.
 - Do not create knowledge pages without valid source topic IDs.
 - Do not use high confidence for inferred, weak, or single-fragment claims.
-- Do not auto-resolve contradictions; represent them with `conflicts_with`.
+- Do not auto-resolve contradictions; represent them with `conflicts_with`. Do not treat hash embeddings as model-level semantic retrieval. Empty search results are valid; errors are not evidence of absence.
 - Do not call commit-style ingestion unless mutation is intended.
 - Do not assume the system has background ingestion or external LLM calls.
 - Do not treat draft knowledge as authoritative.
@@ -353,7 +365,11 @@ propose_knowledge_page(
   summary="Decay settings should be interpreted together with neutralization evidence.",
   body="When comparing alpha decay, preserve the original decay setup and compare neutralization choices using cited forum evidence.",
   source_topic_ids=["topic-id-1", "topic-id-2"],
-  confidence=0.9
+  confidence=0.9,
+  source_evidence=[
+    {"topic_id": "topic-id-1", "claim": "Claim supported by the first source", "excerpt": "actual verbatim excerpt"},
+    {"topic_id": "topic-id-2", "claim": "Claim supported by the second source", "excerpt": "actual verbatim excerpt"}
+  ]
 )
 ```
 

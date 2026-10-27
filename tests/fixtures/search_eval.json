@@ -1,0 +1,538 @@
+{
+  "version": 1,
+  "notes": "Coordinator-curated, source-derived known-target smoke probes for the 2026-10-27 local export. Not an exhaustive or human-annotated semantic relevance benchmark. Known-target recall measures only the listed source IDs; negative cases are empty strings and invented identifiers. Do not infer production precision from this set.",
+  "cases": [
+    {
+      "id": "forum-01-title",
+      "kind": "forum",
+      "query": "【OB】一个自进化的 RAG 搜索系统🎯",
+      "expected_ids": [
+        "40089426663959"
+      ],
+      "category": "title_target",
+      "source_title": "【OB】一个自进化的 RAG 搜索系统🎯"
+    },
+    {
+      "id": "forum-01-phrase",
+      "kind": "forum",
+      "query": "自进化 RAG",
+      "expected_ids": [
+        "40089426663959"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "【OB】一个自进化的 RAG 搜索系统🎯"
+    },
+    {
+      "id": "exact-01",
+      "kind": "exact",
+      "query": "40089426663959",
+      "expected_ids": [
+        "40089426663959"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-02-title",
+      "kind": "forum",
+      "query": "基于LLM+知识自进化的因子挖掘系统工作流",
+      "expected_ids": [
+        "37111825332759"
+      ],
+      "category": "title_target",
+      "source_title": "基于LLM+知识自进化的因子挖掘系统工作流"
+    },
+    {
+      "id": "forum-02-phrase",
+      "kind": "forum",
+      "query": "知识自进化",
+      "expected_ids": [
+        "37111825332759"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "基于LLM+知识自进化的因子挖掘系统工作流"
+    },
+    {
+      "id": "exact-02",
+      "kind": "exact",
+      "query": "37111825332759",
+      "expected_ids": [
+        "37111825332759"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-03-title",
+      "kind": "forum",
+      "query": "浅谈我的一二三阶开发流程----记7.23日新人答疑课",
+      "expected_ids": [
+        "42184733027991"
+      ],
+      "category": "title_target",
+      "source_title": "浅谈我的一二三阶开发流程----记7.23日新人答疑课"
+    },
+    {
+      "id": "forum-03-phrase",
+      "kind": "forum",
+      "query": "开发流程",
+      "expected_ids": [
+        "42184733027991"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "浅谈我的一二三阶开发流程----记7.23日新人答疑课"
+    },
+    {
+      "id": "exact-03",
+      "kind": "exact",
+      "query": "42184733027991",
+      "expected_ids": [
+        "42184733027991"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-04-title",
+      "kind": "forum",
+      "query": "【避坑】回填不是免费的，先区分“缺失信息”和“没有发生事件”",
+      "expected_ids": [
+        "43614846129687"
+      ],
+      "category": "title_target",
+      "source_title": "【避坑】回填不是免费的，先区分“缺失信息”和“没有发生事件”"
+    },
+    {
+      "id": "forum-04-phrase",
+      "kind": "forum",
+      "query": "回填不是免费的",
+      "expected_ids": [
+        "43614846129687"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "【避坑】回填不是免费的，先区分“缺失信息”和“没有发生事件”"
+    },
+    {
+      "id": "exact-04",
+      "kind": "exact",
+      "query": "43614846129687",
+      "expected_ids": [
+        "43614846129687"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-05-title",
+      "kind": "forum",
+      "query": "winsorize(x, std=4) 操作符详解",
+      "expected_ids": [
+        "33038954162583"
+      ],
+      "category": "title_target",
+      "source_title": "winsorize(x, std=4) 操作符详解"
+    },
+    {
+      "id": "forum-05-phrase",
+      "kind": "forum",
+      "query": "winsorize std",
+      "expected_ids": [
+        "33038954162583"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "winsorize(x, std=4) 操作符详解"
+    },
+    {
+      "id": "exact-05",
+      "kind": "exact",
+      "query": "33038954162583",
+      "expected_ids": [
+        "33038954162583"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-06-title",
+      "kind": "forum",
+      "query": "vector_neut(x, y) 操作符详解",
+      "expected_ids": [
+        "33062731607191"
+      ],
+      "category": "title_target",
+      "source_title": "vector_neut(x, y) 操作符详解"
+    },
+    {
+      "id": "forum-06-phrase",
+      "kind": "forum",
+      "query": "vector_neut",
+      "expected_ids": [
+        "33062731607191"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "vector_neut(x, y) 操作符详解"
+    },
+    {
+      "id": "exact-06",
+      "kind": "exact",
+      "query": "33062731607191",
+      "expected_ids": [
+        "33062731607191"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-07-title",
+      "kind": "forum",
+      "query": "减少无效回测",
+      "expected_ids": [
+        "36248601073175"
+      ],
+      "category": "title_target",
+      "source_title": "减少无效回测"
+    },
+    {
+      "id": "forum-07-phrase",
+      "kind": "forum",
+      "query": "无效回测",
+      "expected_ids": [
+        "36248601073175"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "减少无效回测"
+    },
+    {
+      "id": "exact-07",
+      "kind": "exact",
+      "query": "36248601073175",
+      "expected_ids": [
+        "36248601073175"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-08-title",
+      "kind": "forum",
+      "query": "🌊 平滑类算子:均值的几种面孔",
+      "expected_ids": [
+        "43608868935703"
+      ],
+      "category": "title_target",
+      "source_title": "🌊 平滑类算子:均值的几种面孔"
+    },
+    {
+      "id": "forum-08-phrase",
+      "kind": "forum",
+      "query": "平滑类算子",
+      "expected_ids": [
+        "43608868935703"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "🌊 平滑类算子:均值的几种面孔"
+    },
+    {
+      "id": "exact-08",
+      "kind": "exact",
+      "query": "43608868935703",
+      "expected_ids": [
+        "43608868935703"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-09-title",
+      "kind": "forum",
+      "query": "用 Claude Skills 做因子自动挖掘：回测、记录与知识查询模块化",
+      "expected_ids": [
+        "37560258463767"
+      ],
+      "category": "title_target",
+      "source_title": "用 Claude Skills 做因子自动挖掘：回测、记录与知识查询模块化"
+    },
+    {
+      "id": "forum-09-phrase",
+      "kind": "forum",
+      "query": "因子自动挖掘",
+      "expected_ids": [
+        "37560258463767"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "用 Claude Skills 做因子自动挖掘：回测、记录与知识查询模块化"
+    },
+    {
+      "id": "exact-09",
+      "kind": "exact",
+      "query": "37560258463767",
+      "expected_ids": [
+        "37560258463767"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-10-title",
+      "kind": "forum",
+      "query": "数据字段检索器 - 基于WQ自带搜索引擎实现高效复合因子构建",
+      "expected_ids": [
+        "34402915350551"
+      ],
+      "category": "title_target",
+      "source_title": "数据字段检索器 - 基于WQ自带搜索引擎实现高效复合因子构建"
+    },
+    {
+      "id": "forum-10-phrase",
+      "kind": "forum",
+      "query": "数据字段检索器",
+      "expected_ids": [
+        "34402915350551"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "数据字段检索器 - 基于WQ自带搜索引擎实现高效复合因子构建"
+    },
+    {
+      "id": "exact-10",
+      "kind": "exact",
+      "query": "34402915350551",
+      "expected_ids": [
+        "34402915350551"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-11-title",
+      "kind": "forum",
+      "query": "[BRAIN TIPS]ts_backfill operator: An assumption, not a fix",
+      "expected_ids": [
+        "39808300193431"
+      ],
+      "category": "title_target",
+      "source_title": "[BRAIN TIPS]ts_backfill operator: An assumption, not a fix"
+    },
+    {
+      "id": "forum-11-phrase",
+      "kind": "forum",
+      "query": "ts_backfill assumption",
+      "expected_ids": [
+        "39808300193431"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "[BRAIN TIPS]ts_backfill operator: An assumption, not a fix"
+    },
+    {
+      "id": "exact-11",
+      "kind": "exact",
+      "query": "39808300193431",
+      "expected_ids": [
+        "39808300193431"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "forum-12-title",
+      "kind": "forum",
+      "query": "一阶、二阶，你真的用熟练了吗？——聊聊字段挖掘、ts_backfill 和 winsorize",
+      "expected_ids": [
+        "43527457608087"
+      ],
+      "category": "title_target",
+      "source_title": "一阶、二阶，你真的用熟练了吗？——聊聊字段挖掘、ts_backfill 和 winsorize"
+    },
+    {
+      "id": "forum-12-phrase",
+      "kind": "forum",
+      "query": "一阶 二阶",
+      "expected_ids": [
+        "43527457608087"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "一阶、二阶，你真的用熟练了吗？——聊聊字段挖掘、ts_backfill 和 winsorize"
+    },
+    {
+      "id": "exact-12",
+      "kind": "exact",
+      "query": "43527457608087",
+      "expected_ids": [
+        "43527457608087"
+      ],
+      "category": "topic_id"
+    },
+    {
+      "id": "docs-operators-title",
+      "kind": "docs",
+      "query": "Operators",
+      "expected_ids": [
+        "operators"
+      ],
+      "category": "official_doc_target"
+    },
+    {
+      "id": "docs-operators-slug",
+      "kind": "docs",
+      "query": "operators",
+      "expected_ids": [
+        "operators"
+      ],
+      "category": "official_doc_target"
+    },
+    {
+      "id": "docs-neutralization-title",
+      "kind": "docs",
+      "query": "Neutralization",
+      "expected_ids": [
+        "neutralization"
+      ],
+      "category": "official_doc_target"
+    },
+    {
+      "id": "docs-neutralization-slug",
+      "kind": "docs",
+      "query": "neutralization",
+      "expected_ids": [
+        "neutralization"
+      ],
+      "category": "official_doc_target"
+    },
+    {
+      "id": "docs-double-neutralization-title",
+      "kind": "docs",
+      "query": "Double Neutralization",
+      "expected_ids": [
+        "double-neutralization"
+      ],
+      "category": "official_doc_target"
+    },
+    {
+      "id": "docs-double-neutralization-slug",
+      "kind": "docs",
+      "query": "double neutralization",
+      "expected_ids": [
+        "double-neutralization"
+      ],
+      "category": "official_doc_target"
+    },
+    {
+      "id": "docs-risk-neutralization-default-setting-title",
+      "kind": "docs",
+      "query": "Risk Neutralization Default setting",
+      "expected_ids": [
+        "risk-neutralization-default-setting"
+      ],
+      "category": "official_doc_target"
+    },
+    {
+      "id": "docs-risk-neutralization-default-setting-slug",
+      "kind": "docs",
+      "query": "risk neutralization default setting",
+      "expected_ids": [
+        "risk-neutralization-default-setting"
+      ],
+      "category": "official_doc_target"
+    },
+    {
+      "id": "forum-negative-00",
+      "kind": "forum",
+      "query": "",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "forum-negative-01",
+      "kind": "forum",
+      "query": "   ",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "forum-negative-02",
+      "kind": "forum",
+      "query": "zzzxqv_no_such_operator_20261027",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "forum-negative-03",
+      "kind": "forum",
+      "query": "qzv_734819_not_a_datafield",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "forum-negative-04",
+      "kind": "forum",
+      "query": "xqv_unsupported_model_981247",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "forum-negative-05",
+      "kind": "forum",
+      "query": "quux_no_forum_evidence_512834",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "forum-negative-06",
+      "kind": "forum",
+      "query": "neverexistent_operators_449920",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "forum-negative-07",
+      "kind": "forum",
+      "query": "xyzzy_no_results_912345",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "docs-negative-00",
+      "kind": "docs",
+      "query": "",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "docs-negative-01",
+      "kind": "docs",
+      "query": "   ",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "docs-negative-02",
+      "kind": "docs",
+      "query": "zzzxqv_no_such_operator_20261027",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "docs-negative-03",
+      "kind": "docs",
+      "query": "qzv_734819_not_a_datafield",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "docs-negative-04",
+      "kind": "docs",
+      "query": "xqv_unsupported_model_981247",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "docs-negative-05",
+      "kind": "docs",
+      "query": "quux_no_forum_evidence_512834",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "docs-negative-06",
+      "kind": "docs",
+      "query": "neverexistent_operators_449920",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    },
+    {
+      "id": "docs-negative-07",
+      "kind": "docs",
+      "query": "xyzzy_no_results_912345",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier"
+    }
+  ]
+}

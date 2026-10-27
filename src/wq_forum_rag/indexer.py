@@ -113,15 +113,19 @@ class ForumIndexService:
         return {"status": "refreshed", "index": index_result, "manifest": manifest_result}
 
     def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+        if top_k <= 0 or not query.strip():
+            return []
         self._ensure_readable()
         try:
-            candidates = list(set(fts_candidates(self.db_path, query, kind="forum_chunk")))
+            candidates = fts_candidates(self.db_path, query, kind="forum_chunk", limit=max(top_k * 20, 80))
+            if not candidates:
+                return []
             rows = self._search_rows(candidates)
             topic_meta = {row["topic_id"]: row for row in rows}
             backend = CachedEmbeddingBackend(self.db_path, writable=False)
             hits = self.search_mod.ForumSearcher(rows, embedding_backend=backend).search(
                 query=query,
-                top_k=max(top_k * 3, top_k),
+                top_k=len(rows),
             )
             return self._format_hits(hits, topic_meta, top_k)
         except sqlite3.OperationalError as exc:
@@ -151,7 +155,7 @@ class ForumIndexService:
     ) -> list[dict[str, Any]]:
         self._ensure_readable()
         normalized = value.strip()
-        if not normalized:
+        if not normalized or top_k <= 0:
             return []
         try:
             rows = self._exact_rows(normalized, community=community, top_k=top_k)
@@ -205,7 +209,7 @@ class ForumIndexService:
             if not self._table_exists(store.conn, "chunks") or not self._table_exists(store.conn, "topics"):
                 return []
             if not candidates:
-                return [dict(row) for row in store.conn.execute(base_sql + order_clause).fetchall()]
+                return []
             placeholders = ",".join("?" * len(candidates))
             query = base_sql + f" AND c.chunk_id IN ({placeholders})" + order_clause
             return [dict(row) for row in store.conn.execute(query, tuple(candidates)).fetchall()]
@@ -246,10 +250,22 @@ class ForumIndexService:
 
     def _exact_rows(self, normalized: str, *, community: str | None, top_k: int) -> list[Any]:
         lowered = normalized.lower()
-        like_value = f"%{lowered}%"
+        escaped = lowered.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like_value = f"%{escaped}%"
         with self.storage.ForumStore(self.db_path, initialize=False) as store:
             if not self._table_exists(store.conn, "topics"):
                 return []
+            direct = store.conn.execute(
+                """SELECT t.topic_id, t.community_id, t.community_title, t.title, t.author,
+                          t.created_at, t.url, t.vote_num, t.comment_count,
+                          100 AS exact_rank, t.body_text AS matched_content
+                   FROM topics t WHERE t.topic_id = ?
+                     AND (? IS NULL OR t.community_id = ? OR lower(t.community_title) = ?)
+                   LIMIT 1""",
+                (normalized, community, community, community.lower() if community else None),
+            ).fetchall()
+            if direct:
+                return direct
             return store.conn.execute(
                 """
                 SELECT t.topic_id, t.community_id, t.community_title, t.title, t.author,
@@ -258,21 +274,21 @@ class ForumIndexService:
                            WHEN t.topic_id = ? THEN 100
                            WHEN lower(t.url) = ? THEN 95
                            WHEN lower(t.title) = ? THEN 90
-                           WHEN lower(t.title) LIKE ? THEN 75
-                           WHEN lower(t.body_text) LIKE ? THEN 60
-                           WHEN lower(t.comments_json) LIKE ? THEN 50
-                           WHEN lower(c.content) LIKE ? THEN 40
+                           WHEN lower(t.title) LIKE ? ESCAPE '\\' THEN 75
+                           WHEN lower(t.body_text) LIKE ? ESCAPE '\\' THEN 60
+                           WHEN lower(t.comments_json) LIKE ? ESCAPE '\\' THEN 50
+                           WHEN lower(c.content) LIKE ? ESCAPE '\\' THEN 40
                            ELSE 0
                        END) AS exact_rank,
-                       MIN(CASE WHEN lower(c.content) LIKE ? THEN c.content ELSE NULL END)
+                       MIN(CASE WHEN lower(c.content) LIKE ? ESCAPE '\\' THEN c.content ELSE NULL END)
                            AS matched_content
                 FROM topics AS t
                 LEFT JOIN chunks AS c ON c.topic_id = t.topic_id AND c.chunk_level = 1
                 WHERE (? IS NULL OR t.community_id = ? OR lower(t.community_title) = ?)
                   AND (
                       t.topic_id = ? OR lower(t.url) = ? OR lower(t.title) = ?
-                      OR lower(t.title) LIKE ? OR lower(t.body_text) LIKE ?
-                      OR lower(t.comments_json) LIKE ? OR lower(c.content) LIKE ?
+                      OR lower(t.title) LIKE ? ESCAPE '\\' OR lower(t.body_text) LIKE ? ESCAPE '\\'
+                      OR lower(t.comments_json) LIKE ? ESCAPE '\\' OR lower(c.content) LIKE ? ESCAPE '\\'
                   )
                 GROUP BY t.topic_id
                 ORDER BY exact_rank DESC, t.vote_num DESC, t.comment_count DESC, t.created_at DESC

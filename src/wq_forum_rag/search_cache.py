@@ -52,6 +52,10 @@ class CachedEmbeddingBackend:
         return [vector or [] for vector in vectors]
 
     def _cached_vector(self, conn: sqlite3.Connection, content_hash: str) -> list[float] | None:
+        if not self.writable and not conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = ?", ("embedding_cache",)
+        ).fetchone():
+            return None
         row = conn.execute(
             """
             SELECT vector_json FROM embedding_cache

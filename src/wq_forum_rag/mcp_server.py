@@ -147,6 +147,7 @@ def propose_knowledge_page(
     db: str | None = None,
     links: list[dict[str, Any]] | None = None,
     auto_publish: bool = True,
+    source_evidence: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     db_path = _resolve_db_path(db)
     try:
@@ -159,9 +160,16 @@ def propose_knowledge_page(
             confidence=confidence,
             links=links,
             auto_publish=auto_publish,
+            source_evidence=source_evidence,
         )
     except ForumDatabaseBusyError as exc:
         return _busy_payload(exc, page=None, issues=[], auto_published=False)
+    except sqlite3.OperationalError as exc:
+        try:
+            raise_if_database_locked(exc, db_path)
+        except ForumDatabaseBusyError as busy:
+            return _busy_payload(busy, page=None, issues=[], auto_published=False)
+        raise
     return {"db": str(db_path), **result}
 
 
@@ -263,6 +271,26 @@ def publish_knowledge_page(slug: str, db: str | None = None) -> dict[str, Any]:
             return _busy_payload(busy, published=False, page=None, issues=[])
         raise
     return {"db": str(db_path), **result}
+
+
+def review_knowledge_page(
+    slug: str, action: str, note: str, db: str | None = None, replacement_slug: str | None = None,
+) -> dict[str, Any]:
+    """Record a human/agent review, request review, or archive with a reason.
+
+    A located excerpt is not proof of a claim; the reviewer assesses its support.
+    """
+    db_path = _resolve_db_path(db)
+    try:
+        page = EvolutionService(db_path).review_knowledge_page(
+            slug, action, note=note, replacement_slug=replacement_slug)
+    except sqlite3.OperationalError as exc:
+        try:
+            raise_if_database_locked(exc, db_path)
+        except ForumDatabaseBusyError as busy:
+            return _busy_payload(busy, page=None)
+        raise
+    return {"db": str(db_path), "page": page}
 
 
 def graph_query(
@@ -451,6 +479,7 @@ def build_mcp_server(default_db: str | Path | None = None) -> FastMCP:
     server.tool()(link_knowledge_pages)
     server.tool()(lint_knowledge)
     server.tool()(publish_knowledge_page)
+    server.tool()(review_knowledge_page)
     server.tool()(graph_query)
     server.tool()(export_knowledge_wiki)
     server.tool()(rebuild_search_index)

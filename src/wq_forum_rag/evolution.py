@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from wq_forum_rag.indexer import ForumDatabaseBusyError, ForumIndexService, raise_if_database_locked
-from wq_forum_rag.knowledge import DRAFT, PUBLISHED, KnowledgePage, KnowledgeStore
+from wq_forum_rag.knowledge import DRAFT, PUBLISHED, KnowledgePage, KnowledgeStore, normalize_slug
+from wq_forum_rag.knowledge_quality import quality_issues
 from wq_forum_rag.search_cache import CachedEmbeddingBackend
 from wq_forum_rag.search_records import search_forum_records, search_knowledge_records
 from wq_forum_rag.storage import ForumStore
@@ -49,6 +50,7 @@ class EvolutionService:
         confidence: float,
         links: list[dict[str, Any]] | None = None,
         auto_publish: bool = True,
+        source_evidence: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         self._ensure_forum_fresh()
         page = KnowledgePage(
@@ -64,17 +66,17 @@ class EvolutionService:
             if not store.topic_ids_exist(unique_sources):
                 raise ValueError("source_topic_ids must reference existing forum topics")
             issues = self._lint_page_payload(page, unique_sources, links or [])
-            can_auto_publish = (
-                auto_publish
-                and page.confidence >= AUTO_PUBLISH_CONFIDENCE
-                and not any(item["severity"] == "block" for item in issues)
-            )
-            if can_auto_publish:
-                page.status = PUBLISHED
+            # A proposal always requires a separate explicit review.
+            issues.append(self._issue(page.slug, "block", "review_required"))
+            existing = store.get_page(page.slug)
+            if existing and any(link["relation_type"] == "conflicts_with" for link in existing["links"] + existing["backlinks"]):
+                if not any(issue["code"] == "conflict_link_present" for issue in issues):
+                    issues.append(self._issue(page.slug, "block", "conflict_link_present"))
             stored = store.upsert_page(
                 page,
                 source_topic_ids=unique_sources,
                 links=links or [],
+                source_evidence=source_evidence,
                 event_type="proposed",
                 event_note="auto-published" if page.status == PUBLISHED else "drafted",
             )
@@ -85,14 +87,53 @@ class EvolutionService:
             }
 
     def publish_knowledge_page(self, slug: str) -> dict[str, Any]:
-        if self.get_knowledge_page(slug) is None:
-            return {"published": False, "slug": slug, "issues": [{"slug": slug, "severity": "block", "code": "missing_page"}]}
-        issues = self.lint_knowledge(slug=slug)["issues"]
-        blockers = [item for item in issues if item["severity"] == "block"]
-        if blockers:
-            return {"published": False, "slug": slug, "issues": blockers}
         with KnowledgeStore(self.db_path) as store:
-            return {"published": True, "page": store.set_status(slug, PUBLISHED, "manual publish")}
+            # Acquire a write lock before checking, so evidence and links cannot change
+            # between validation and publication.
+            store.conn.execute("BEGIN IMMEDIATE")
+            page = store.get_page(slug)
+            if page is None:
+                return {"published": False, "slug": slug, "issues": [self._issue(slug, "block", "missing_page")]}
+            codes = quality_issues(store.conn).get(page["slug"], {"review_required"})
+            blockers = [self._issue(page["slug"], "block", code) for code in sorted(codes)]
+            if blockers:
+                return {"published": False, "slug": slug, "issues": blockers}
+            published = store.set_status(slug, PUBLISHED, "manual publish")
+            store.conn.commit()
+            return {"published": True, "page": published}
+
+    def review_knowledge_page(
+        self, slug: str, action: str, *, note: str, replacement_slug: str | None = None,
+    ) -> dict[str, Any]:
+        if action not in {"reviewed", "needs_review", "archived"}:
+            raise ValueError("action must be reviewed, needs_review, or archived")
+        if not note.strip():
+            raise ValueError("a review or archive note is required")
+        with KnowledgeStore(self.db_path) as store:
+            store.conn.execute("BEGIN IMMEDIATE")
+            page = store.get_page(slug)
+            if page is None:
+                raise ValueError("knowledge page does not exist")
+            if replacement_slug:
+                replacement_slug = normalize_slug(replacement_slug)
+                if action != "archived" or replacement_slug == page["slug"] or not store.page_exists(replacement_slug):
+                    raise ValueError("replacement must be another existing page for an archive")
+            if action == "reviewed":
+                issues = quality_issues(store.conn).get(page["slug"], {"missing_support"})
+                blockers = issues - {"review_required"}
+                if blockers:
+                    raise ValueError("cannot review page: " + ", ".join(sorted(blockers)))
+            store.conn.execute("UPDATE knowledge_pages SET review_status = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?",
+                               ("reviewed" if action == "reviewed" else "needs_review", page["slug"]))
+            if action == "archived":
+                if replacement_slug:
+                    store.link_pages(page["slug"], replacement_slug, "superseded_by")
+                store.set_status(page["slug"], "archived", note + (f"; replacement:{replacement_slug}" if replacement_slug else ""))
+            else:
+                store.add_event(page["slug"], f"review:{action}", note)
+                store._sync_fts(page["slug"])
+            store.conn.commit()
+            return store.get_page(page["slug"])
 
     def get_knowledge_page(self, slug: str) -> dict[str, Any] | None:
         try:
@@ -111,7 +152,7 @@ class EvolutionService:
         weight: float = 1.0,
         confidence: float = 0.8,
     ) -> dict[str, Any]:
-        with KnowledgeStore(self.db_path) as store:
+        with KnowledgeStore(self.db_path) as store, store.conn:
             return store.link_pages(
                 source_slug,
                 target_slug,
@@ -160,6 +201,7 @@ class EvolutionService:
     def lint_knowledge(self, slug: str | None = None) -> dict[str, Any]:
         try:
             with KnowledgeStore(self.db_path, initialize=False) as store:
+                quality = quality_issues(store.conn)
                 pages = [store.get_page(slug)] if slug else [
                     store.get_page(page["slug"]) for page in store.list_pages(include_drafts=True)
                 ]
@@ -169,6 +211,8 @@ class EvolutionService:
         issues: list[dict[str, Any]] = []
         for page in [item for item in pages if item]:
             page_issues = self._lint_page_record(page)
+            existing_codes = {item["code"] for item in page_issues}
+            page_issues.extend(self._issue(page["slug"], "block", code) for code in sorted(quality.get(page["slug"], {"review_required"}) - existing_codes))
             issues.extend(page_issues)
         return {
             "slug": slug,

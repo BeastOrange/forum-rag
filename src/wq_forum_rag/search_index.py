@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -56,12 +57,59 @@ def fts_candidates(
 ) -> list[str]:
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
-        if not _table_exists(conn, "document_fts"):
-            return []
-        match_query = _fts_query(query)
-        if not match_query:
-            return []
-        return _query_fts(conn, kind, match_query, limit, include_drafts)
+        return candidate_ids(conn, query, kind=kind, limit=limit, include_drafts=include_drafts)
+
+
+def candidate_ids(conn: sqlite3.Connection, query: str, *, kind: str, limit: int,
+                  include_drafts: bool = False) -> list[str]:
+    """Bound candidates; old unicode61 indexes need literal Chinese substring lookup."""
+    if limit <= 0 or not query.strip():
+        return []
+    match_query = _fts_query(query)
+    if not match_query:
+        return []
+    required = {"forum_chunk": ("chunks", "topics"), "doc_chunk": ("doc_chunks", "documents"), "knowledge_page": ("knowledge_pages",)}
+    if kind in required and not all(_table_exists(conn, table) for table in required[kind]):
+        return []
+    available = _table_exists(conn, "document_fts")
+    chinese = re.findall(r"[\u4e00-\u9fff]+", query)
+    fts_limit = max(1, limit // 2) if chinese and limit > 1 else limit
+    ids = _query_fts(conn, kind, match_query, fts_limit, include_drafts) if available else []
+    # unicode61 indexes an entire contiguous Chinese run as one token. Search the
+    # original records for literal runs, also when an older index is in use.
+    terms = chinese.copy()
+    if not available:
+        terms += re.findall(r"[A-Za-z0-9_]+", query)
+    if not terms or len(ids) >= limit:
+        return ids
+    sources = {
+        "forum_chunk": ("chunks c JOIN topics t ON t.topic_id=c.topic_id", "c.chunk_id", "c.chunk_level=1", ("t.title", "t.community_title", "c.content")),
+        "doc_chunk": ("doc_chunks c JOIN documents d ON d.slug=c.slug", "c.chunk_id", "1", ("d.title", "c.content")),
+        "knowledge_page": ("knowledge_pages p", "p.slug", "1" if include_drafts else "p.status='published'", ("p.title", "p.summary", "p.body")),
+    }
+    if kind not in sources:
+        return ids
+    tables, ident, condition, columns = sources[kind]
+    required = {"forum_chunk": ("chunks", "topics"), "doc_chunk": ("doc_chunks", "documents"), "knowledge_page": ("knowledge_pages",)}[kind]
+    if not all(_table_exists(conn, table) for table in required):
+        return ids
+    clauses = []
+    params = []
+    for term in dict.fromkeys(terms):
+        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        for column in columns:
+            clauses.append(f"{column} LIKE ? ESCAPE '\\'")
+            params.append(f"%{escaped}%")
+    rows = conn.execute(f"SELECT {ident} FROM {tables} WHERE {condition} AND ({' OR '.join(clauses)}) LIMIT ?", (*params, limit)).fetchall()
+    seen = set(ids)
+    for row in rows:
+        value = str(row[0])
+        if value not in seen:
+            ids.append(value)
+            seen.add(value)
+            if len(ids) >= limit:
+                break
+    return ids
 
 
 def _rebuild_with_conn(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -95,33 +143,30 @@ def _rebuild_with_conn(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def _query_fts(conn: sqlite3.Connection, kind: str, match_query: str, limit: int, include_drafts: bool):
-    try:
-        if kind == "knowledge_page":
-            rows = conn.execute(
-                """
-                SELECT document_fts.record_id
-                FROM document_fts
-                JOIN knowledge_pages ON knowledge_pages.slug = document_fts.record_id
-                WHERE kind = ? AND document_fts MATCH ?
-                  AND (? OR knowledge_pages.status = 'published')
-                ORDER BY rank
-                LIMIT ?
-                """,
-                (kind, match_query, int(include_drafts), limit),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT record_id FROM document_fts
-                WHERE kind = ? AND document_fts MATCH ?
-                ORDER BY rank
-                LIMIT ?
-                """,
-                (kind, match_query, limit),
-            ).fetchall()
-    except sqlite3.OperationalError:
-        return []
-    return [str(row["record_id"]) for row in rows]
+    if kind == "knowledge_page":
+        rows = conn.execute(
+            """
+            SELECT document_fts.record_id
+            FROM document_fts
+            JOIN knowledge_pages ON knowledge_pages.slug = document_fts.record_id
+            WHERE kind = ? AND document_fts MATCH ?
+              AND (? OR knowledge_pages.status = 'published')
+            ORDER BY rank
+            LIMIT ?
+            """,
+            (kind, match_query, int(include_drafts), limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT record_id FROM document_fts
+            WHERE kind = ? AND document_fts MATCH ?
+            ORDER BY rank
+            LIMIT ?
+            """,
+            (kind, match_query, limit),
+        ).fetchall()
+    return [str(row[0]) for row in rows]
 
 
 def _forum_rows(conn: sqlite3.Connection) -> list[tuple[str, str, str, str, str, str]]:

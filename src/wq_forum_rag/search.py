@@ -236,11 +236,13 @@ def hybrid_search(
     lexical_scores = [lexical_score(query, chunk) for chunk in filtered_chunks]
     candidate_limit = min(len(filtered_chunks), max(top_k * 20, 80))
     candidate_indexes = sorted(
-        range(len(filtered_chunks)),
+        (index for index in range(len(filtered_chunks)) if lexical_scores[index] > 0),
         key=lambda index: (lexical_scores[index], _chunk_id(filtered_chunks[index], index, _topic_id(filtered_chunks[index], index))),
         reverse=True,
     )[:candidate_limit]
 
+    if not candidate_indexes:
+        return []
     backend = embedding_backend or build_embedding_backend()
     query_embedding = backend.embed_query(query)
     candidate_embeddings = backend.embed_documents(

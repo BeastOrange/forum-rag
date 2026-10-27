@@ -117,7 +117,7 @@ python -m pip install -e ".[local-embeddings]"
 
 - **论坛索引：** 解析 community、topic、author、时间、投票/评论等轻量元数据，并从 HTML 清洗正文文本。
 - **增量更新：** `index` 会根据源 JSON 的路径、mtime 与 size 跳过未变更文件；替换导出或需要强制刷新时使用 `--rebuild`。`refresh` 则把论坛索引和来源 manifest 提交组合为一步。
-- **混合检索：** SQLite FTS5 先做关键词候选召回，再复用 `ForumSearcher` 做 lexical + dense rerank；可选 embedding 后端的结果会按 backend 与内容 hash 缓存。
+- **候选检索与排序：** SQLite FTS5 召回关键词候选；中文子串及缺少 FTS 时走有数量上限的字面查询，兼容已有索引。正常无命中返回空结果，索引错误向上传递。默认 256 维哈希向量只辅助词法排序，不具备模型级同义理解能力；可选 embedding 接口不等于独立语义召回。
 - **精确/近邻查询：** `find_by_exact` 面向 topic id、URL、标题、正文、评论与 chunk 的精确词命中；`related_posts` 基于标题寻找同社区相关主题。
 
 首次显式重建论坛索引：
@@ -218,29 +218,46 @@ Claude Desktop 或其他兼容 MCP 客户端的配置示例：
 Windows 下将可执行文件路径改为 `...\envs\forum-rag\Scripts\forum-rag-mcp.exe`。
 
 <details>
-<summary><strong>查看全部 19 个 MCP 工具</strong></summary>
+<summary><strong>查看全部 20 个 MCP 工具</strong></summary>
 
 | 分组 | 工具 |
 | --- | --- |
 | 论坛检索 | `search_forum(query, db=None, top_k=5)`<br>`get_post(topic_id, db=None)`<br>`find_by_exact(value, db=None, community=None, top_k=5)`<br>`related_posts(topic_id, db=None, top_k=5)` |
 | 官方文档 | `search_docs(query, db=None, top_k=5)`<br>`get_doc(slug, db=None)`<br>`ingest_docs(directory, db=None, rebuild=False, prune=True)` |
 | 来源管理 | `source_status(source, db=None)`<br>`source_ingest_plan(source, db=None, commit=False)` |
-| 知识层 | `build_evolution_context(query, db=None, top_k=5)`<br>`propose_knowledge_page(slug, title, summary, body, source_topic_ids, confidence, db=None, links=None, auto_publish=True)`<br>`search_knowledge(query, db=None, top_k=5, include_drafts=False)`<br>`get_knowledge_page(slug, db=None)`<br>`link_knowledge_pages(source_slug, target_slug, relation_type, db=None, weight=1.0, confidence=0.8)`<br>`lint_knowledge(db=None, slug=None)`<br>`publish_knowledge_page(slug, db=None)`<br>`graph_query(slug, db=None, depth=1, relation_type=None)`<br>`export_knowledge_wiki(db=None, output_dir=".cache/wiki", include_drafts=False)` |
+| 知识层 | `build_evolution_context(query, db=None, top_k=5)`<br>`propose_knowledge_page(slug, title, summary, body, source_topic_ids, confidence, db=None, links=None, auto_publish=True, source_evidence=None)`<br>`search_knowledge(query, db=None, top_k=5, include_drafts=False)`<br>`get_knowledge_page(slug, db=None)`<br>`link_knowledge_pages(source_slug, target_slug, relation_type, db=None, weight=1.0, confidence=0.8)`<br>`lint_knowledge(db=None, slug=None)`<br>`publish_knowledge_page(slug, db=None)`<br>`graph_query(slug, db=None, depth=1, relation_type=None)`<br>`export_knowledge_wiki(db=None, output_dir=".cache/wiki", include_drafts=False)` |
+| 审核与归档 | `review_knowledge_page(slug, action, note, db=None, replacement_slug=None)` |
 | 维护 | `rebuild_search_index(db=None)` |
 
 </details>
 
 ## 自进化知识层：从证据到可复用结论
 
-知识层不内置外部 LLM API：**MCP 客户端负责阅读、总结和判断；本项目负责确定性存储、来源校验、低风险自动发布、图谱连边和 lint。**
+知识层不内置外部 LLM API：**MCP 客户端负责阅读、总结和判断；本项目负责存储、证据定位、来源版本校验、审核记录、图谱连边和 lint。** 知识沉淀不会训练或修改模型权重。
 
 推荐让 Agent 按以下流程工作：
 
 1. `build_evolution_context("你的问题")`：优先返回已发布知识页，并附带完整论坛证据。
 2. Agent 阅读上下文，归纳稳定结论。
-3. `propose_knowledge_page(...)`：写入草稿，并提供支撑结论的 `source_topic_ids`。
-4. 当 `confidence >= 0.85`、来源 topic 存在、且没有 `conflicts_with` 阻塞项时，系统允许低风险自动发布；否则可经 `lint_knowledge` / `publish_knowledge_page` 处理。
+3. `propose_knowledge_page(..., source_evidence=[...])`：写入草稿。每项证据包含 `topic_id`、`claim` 和原文中的 `excerpt`；系统保存来源的内容版本。旧调用仍可建草稿，`auto_publish` 参数保留兼容，但不会绕过审核。
+4. 核对结论、适用范围和摘录后，调用 `review_knowledge_page(slug, "reviewed", note="审核说明")`，再调用 `publish_knowledge_page(slug)`。来源存在、摘录存在及高 confidence 都不等于结论正确；支持程度由审核者负责。
 5. 后续用 `search_knowledge(...)` 查找已沉淀内容，必要时再回退到论坛检索。
+
+默认搜索只返回审核通过、来源版本未变、无冲突且依赖有效的已发布知识。旧库没有审核版本的知识先排除，需补证据并重新审核；读取不会自动迁移数据库。新增 `conflicts_with` 会让双方失去可信资格；`depends_on` 的失效会传递给依赖页，`related_to` 不作为依赖。
+
+显式归档：`review_knowledge_page(slug, "archived", note="废弃原因", replacement_slug="替代页")`；替代页可省略。保留历史和来源，不按发布时间或访问次数自动覆盖、删除或改写其他页面。已有归档状态继续使用。
+
+### 重复测量检索结果
+
+使用数据库副本运行：
+
+```bash
+PYTHONPATH=src python scripts/evaluate_search.py \
+  --db /path/to/forum-copy.sqlite3 \
+  --transport mcp --repeats 3 --output /tmp/search-report.json
+```
+
+脚本记录语料规模、源码指纹、已知目标召回、无答案误返回和首次/重复调用耗时。默认 60 条检查针对本项目的本地导出构造；它们不是完整的人工相关性标注，不能据此声称通用准确率。请用 `--cases` 提供符合你自己数据的标注。首次调用也不代表操作系统冷缓存。参见 [本轮验证记录](docs/search-quality-verification.md)。
 
 知识页仍写入同一 SQLite，相关表包括：
 
@@ -299,6 +316,6 @@ uv run forum-rag ingest-docs Documents
 
 已实现：本地 JSON 解析、SQLite 原帖与 chunk 索引、Markdown 文档摄入、FTS5 + hybrid search、来源 manifest、知识页与来源绑定、typed graph、Wiki 导出、backlink boost 与 embedding cache。
 
-暂未实现：PDF/截图/音频/视频等多模态摄入、定时或 always-on ingestion、由 LLM 自动识别矛盾（目前由客户端通过 `conflicts_with` 提交后阻止自动发布），以及外部向量数据库或 seekdb 类服务化基础设施。
+暂未实现：独立的模型语义召回及其完整准确率评测、PDF/截图/音频/视频等多模态摄入、定时或 always-on ingestion、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
 
 对外 CLI / MCP contract 与内部 `parser`、`storage`、`search` 模块解耦；后续替换 embedding backend 或调优 chunk/search 策略，不应改变既有 CLI/MCP 接口。

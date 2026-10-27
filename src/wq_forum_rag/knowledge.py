@@ -98,6 +98,7 @@ class KnowledgeStore:
         *,
         source_topic_ids: list[str],
         links: list[dict[str, Any]] | None = None,
+        source_evidence: list[dict[str, Any]] | None = None,
         event_type: str = "proposed",
         event_note: str = "",
     ) -> KnowledgePage:
@@ -130,13 +131,17 @@ class KnowledgeStore:
                     page.content_hash,
                 ),
             )
+            self.conn.execute("UPDATE knowledge_pages SET review_status = ? WHERE slug = ?", ("unreviewed", page.slug))
             self.conn.execute("DELETE FROM knowledge_sources WHERE slug = ?", (page.slug,))
+            evidence = {str(item.get("topic_id", "")): item for item in (source_evidence or [])}
             self.conn.executemany(
                 """
-                INSERT INTO knowledge_sources(slug, topic_id, evidence_note)
-                VALUES (?, ?, ?)
+                INSERT INTO knowledge_sources(slug, topic_id, evidence_note, source_content_hash, claim, excerpt)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                [(page.slug, topic_id, "") for topic_id in unique_sources],
+                [(page.slug, topic_id, "", self._topic_hash(topic_id),
+                  str(evidence.get(topic_id, {}).get("claim") or ""),
+                  str(evidence.get(topic_id, {}).get("excerpt") or "")) for topic_id in unique_sources],
             )
             for link in links:
                 self.link_pages(
@@ -147,6 +152,7 @@ class KnowledgeStore:
                     confidence=float(link.get("confidence", page.confidence)),
                 )
             self.add_event(page.slug, event_type, event_note or f"{page.status}:{page.content_hash}")
+            self._sync_fts(page.slug)
         return page
 
     def get_page(self, slug: str) -> dict[str, Any] | None:
@@ -215,20 +221,19 @@ class KnowledgeStore:
         if not self.page_exists(source) or not self.page_exists(target):
             raise ValueError("both source_slug and target_slug must reference existing knowledge pages")
         bounded_confidence = max(0.0, min(float(confidence), 1.0))
-        with self.conn:
-            self.conn.execute(
-                """
-                INSERT INTO knowledge_links (
-                    source_slug, target_slug, relation_type, weight, confidence, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(source_slug, target_slug, relation_type) DO UPDATE SET
-                    weight = excluded.weight,
-                    confidence = excluded.confidence
-                """,
-                (source, target, relation, float(weight), bounded_confidence),
+        self.conn.execute(
+            """
+            INSERT INTO knowledge_links (
+                source_slug, target_slug, relation_type, weight, confidence, created_at
             )
-            self.add_event(source, "linked", f"{relation}:{target}")
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(source_slug, target_slug, relation_type) DO UPDATE SET
+                weight = excluded.weight,
+                confidence = excluded.confidence
+            """,
+            (source, target, relation, float(weight), bounded_confidence),
+        )
+        self.add_event(source, "linked", f"{relation}:{target}")
         return {
             "source_slug": source,
             "target_slug": target,
@@ -242,16 +247,16 @@ class KnowledgeStore:
         normalized_status = normalize_status(status)
         if not self.page_exists(page_slug):
             return None
-        with self.conn:
-            self.conn.execute(
-                """
-                UPDATE knowledge_pages
-                SET status = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE slug = ?
-                """,
-                (normalized_status, page_slug),
-            )
-            self.add_event(page_slug, f"status:{normalized_status}", note)
+        self.conn.execute(
+            """
+            UPDATE knowledge_pages
+            SET status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE slug = ?
+            """,
+            (normalized_status, page_slug),
+        )
+        self.add_event(page_slug, f"status:{normalized_status}", note)
+        self._sync_fts(page_slug)
         return self.get_page(page_slug)
 
     def add_event(self, slug: str, event_type: str, note: str = "") -> None:
@@ -310,7 +315,29 @@ class KnowledgeStore:
                 ON knowledge_links(target_slug);
             """
         )
+        for table, column, definition in (
+            ("knowledge_pages", "review_status", "TEXT NOT NULL DEFAULT 'unreviewed'"),
+            ("knowledge_sources", "source_content_hash", "TEXT NOT NULL DEFAULT ''"),
+            ("knowledge_sources", "claim", "TEXT NOT NULL DEFAULT ''"),
+            ("knowledge_sources", "excerpt", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            columns = {row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")}
+            if column not in columns:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
         self.conn.commit()
+
+    def _topic_hash(self, topic_id: str) -> str:
+        row = self.conn.execute("SELECT content_hash FROM topics WHERE topic_id = ?", (topic_id,)).fetchone()
+        return str(row[0]) if row else ""
+
+    def _sync_fts(self, slug: str) -> None:
+        if not self._table_exists("document_fts"):
+            return
+        self.conn.execute("DELETE FROM document_fts WHERE kind = 'knowledge_page' AND record_id = ?", (slug,))
+        self.conn.execute(
+            "INSERT INTO document_fts(kind, record_id, topic_id, title, community, content) "
+            "SELECT 'knowledge_page', slug, slug, title, status, summary || char(10) || body "
+            "FROM knowledge_pages WHERE slug = ?", (slug,))
 
     def _rows(self, table: str, column: str, slug: str) -> list[sqlite3.Row]:
         return self.conn.execute(
