@@ -75,7 +75,7 @@ def _constraints(query):
 
 
 def _matches(text, constraints):
-    return all(re.search(r'(?<![A-Za-z0-9_])' + re.escape(term) + r'(?![A-Za-z0-9_])', text, re.I) for term in constraints)
+    return all(re.search(r'(?<![A-Za-z0-9_])' + re.escape(term) + r'(?![A-Za-z0-9_])', text, re.I | re.ASCII) for term in constraints)
 
 
 def _excerpt(row, size, query=''):
@@ -146,7 +146,8 @@ def search_forum_batch(db_path, query: str, *, query_variants: list[str] | None 
                 limit = _CANDIDATES // len(routes)
                 for route in routes:
                     route_limits.append(limit)
-                    ids = candidate_ids(conn, route, kind='forum_chunk', limit=limit)
+                    options = {'constraints': literals} if literals else {}
+                    ids = candidate_ids(conn, route, kind='forum_chunk', limit=limit, **options)
                     route_lists.append(list(dict.fromkeys(ids))[:limit])
                     _check_deadline(deadline)
             route_counts = [len(items) for items in route_lists]

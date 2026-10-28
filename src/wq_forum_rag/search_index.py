@@ -114,13 +114,13 @@ def _cached_candidate_ids(conn: sqlite3.Connection, query: str, *, kind: str, li
 
 
 def candidate_ids(conn: sqlite3.Connection, query: str, *, kind: str, limit: int,
-                  include_drafts: bool = False) -> list[str]:
+                  include_drafts: bool = False, constraints: tuple[str, ...] = ()) -> list[str]:
     return _candidate_ids_uncached(conn, query, kind=kind, limit=limit,
-                                   include_drafts=include_drafts)
+                                   include_drafts=include_drafts, constraints=constraints)
 
 
 def _candidate_ids_uncached(conn: sqlite3.Connection, query: str, *, kind: str, limit: int,
-                            include_drafts: bool = False) -> list[str]:
+                            include_drafts: bool = False, constraints: tuple[str, ...] = ()) -> list[str]:
     """Bound candidates; old unicode61 indexes need literal Chinese substring lookup."""
     if limit <= 0 or not query.strip():
         return []
@@ -132,11 +132,11 @@ def _candidate_ids_uncached(conn: sqlite3.Connection, query: str, *, kind: str, 
         return []
     if (os.environ.get("FORUM_RAG_CHINESE_INDEX") == "1" and chinese_index.segments(query)
             and chinese_index.complete(conn)):
-        return chinese_index.candidates(conn, query, kind, limit, include_drafts)
+        return chinese_index.candidates(conn, query, kind, limit, include_drafts, constraints)
     available = _table_exists(conn, "document_fts")
     chinese = re.findall(r"[\u4e00-\u9fff]+", query)
     fts_limit = max(1, limit // 2) if chinese and limit > 1 else limit
-    ids = _query_fts(conn, kind, match_query, fts_limit, include_drafts) if available else []
+    ids = _query_fts(conn, kind, match_query, fts_limit, include_drafts, constraints) if available else []
     # unicode61 indexes an entire contiguous Chinese run as one token. Search the
     # original records for literal runs, also when an older index is in use.
     terms = chinese.copy()
@@ -162,6 +162,10 @@ def _candidate_ids_uncached(conn: sqlite3.Connection, query: str, *, kind: str, 
         for column in columns:
             clauses.append(f"{column} LIKE ? ESCAPE '\\'")
             params.append(f"%{escaped}%")
+    if kind == 'forum_chunk':
+        extra, values = chinese_index.forum_constraint_sql(conn, constraints)
+        condition += ''.join(f' AND {clause}' for clause in extra)
+        params = values + params
     rows = conn.execute(f"SELECT {ident} FROM {tables} WHERE {condition} AND ({' OR '.join(clauses)}) LIMIT ?", (*params, limit)).fetchall()
     seen = set(ids)
     for row in rows:
@@ -222,7 +226,7 @@ def _rebuild_with_conn(conn: sqlite3.Connection, *, chinese: bool = False) -> di
             "indexed_documents": sum(counts.values())}
 
 
-def _query_fts(conn: sqlite3.Connection, kind: str, match_query: str, limit: int, include_drafts: bool):
+def _query_fts(conn: sqlite3.Connection, kind: str, match_query: str, limit: int, include_drafts: bool, constraints=()):
     if kind == "knowledge_page":
         rows = conn.execute(
             """
@@ -235,6 +239,16 @@ def _query_fts(conn: sqlite3.Connection, kind: str, match_query: str, limit: int
             LIMIT ?
             """,
             (kind, match_query, int(include_drafts), limit),
+        ).fetchall()
+    elif kind == 'forum_chunk' and constraints:
+        clauses, params = chinese_index.forum_constraint_sql(conn, constraints)
+        rows = conn.execute(
+            "SELECT document_fts.record_id FROM document_fts "
+            "JOIN chunks c ON c.chunk_id=document_fts.record_id "
+            "JOIN topics t ON t.topic_id=c.topic_id "
+            "WHERE document_fts.kind=? AND document_fts MATCH ? AND c.chunk_level=1 AND "
+            + ' AND '.join(clauses) + ' ORDER BY rank LIMIT ?',
+            (kind, match_query, *params, limit),
         ).fetchall()
     else:
         rows = conn.execute(

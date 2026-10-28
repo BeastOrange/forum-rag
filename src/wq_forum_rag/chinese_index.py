@@ -70,7 +70,44 @@ def sync_knowledge(conn, slug):
     insert_rows(conn, rows)
 
 
-def candidates(conn, query, kind, limit, include_drafts):
+def forum_constraint_sql(conn, constraints):
+    """Match ASCII boundaries in a title and its candidate chunk, before LIMIT."""
+    if not constraints:
+        return [], []
+    encoding = conn.execute('PRAGMA encoding').fetchone()[0].upper()
+    width = 2 if encoding.startswith('UTF-16') else 1
+    text = "(lower(coalesce(t.title,'')) || char(10) || lower(coalesce(c.content,'')))"
+    blob = f'CAST({text} AS BLOB)'
+    # GLOB stops at NUL. For these rare strings search every byte occurrence,
+    # respecting database encoding alignment and checking adjacent ASCII units.
+    # BLOB substr/instr preserve data after NUL, unlike text substr/length.
+    match = f"""CASE WHEN instr({text}, char(0)) = 0
+        THEN (' ' || {text} || ' ') GLOB ?
+        ELSE EXISTS (
+            WITH RECURSIVE hits(pos) AS (
+                SELECT instr({blob}, CAST(? AS BLOB))
+                UNION ALL
+                SELECT pos + instr(substr({blob}, pos + 1), CAST(? AS BLOB))
+                FROM hits WHERE pos > 0
+                  AND instr(substr({blob}, pos + 1), CAST(? AS BLOB)) > 0
+            )
+            SELECT 1 FROM hits WHERE pos > 0 AND (pos - 1) % {width} = 0
+              AND (pos = 1 OR CAST(substr({blob}, pos - {width}, {width}) AS TEXT)
+                   NOT GLOB '[a-z0-9_]')
+              AND CAST(substr({blob}, pos + length(CAST(? AS BLOB)), {width}) AS TEXT)
+                  NOT GLOB '[a-z0-9_]'
+        ) END"""
+    clauses, params = [], []
+    for term in constraints:
+        if not re.fullmatch(r'[A-Za-z0-9_]+', term, flags=re.ASCII):
+            raise ValueError('forum constraints must contain only ASCII letters, digits, or underscores')
+        term = term.lower()
+        clauses.append(match)
+        params.extend((f'*[^a-z0-9_]{term}[^a-z0-9_]*', term, term, term, term))
+    return clauses, params
+
+
+def candidates(conn, query, kind, limit, include_drafts, constraints=()):
     runs = list(dict.fromkeys(segments(query)))
     match = []
     for run in runs:
@@ -103,6 +140,10 @@ def candidates(conn, query, kind, limit, include_drafts):
     for word in dict.fromkeys(re.findall(r'[A-Za-z0-9_]+', query.lower())):
         clauses.append('(' + ' OR '.join(f'instr(lower({field}), ?) > 0' for field in fields) + ')')
         params.extend((word,) * len(fields))
+    if kind == 'forum_chunk':
+        extra, values = forum_constraint_sql(conn, constraints)
+        clauses.extend(extra)
+        params.extend(values)
     params.append(limit)
     sql = ('SELECT m.record_id FROM chinese_fts_v2 f '
            'JOIN chinese_index_rows m ON m.rowid=f.rowid' + join +
