@@ -21,6 +21,34 @@
 - **两类来源各自独立。** 仓库自带的官方研究文档与用户自己的论坛 JSON 共享存储文件，但在表、FTS 类型与 MCP 查询入口上彼此隔离，避免混淆来源。
 - **让检索结果可以沉淀。** Agent 可把有论坛原帖支撑的稳定结论保存成知识页，建立来源绑定、关系图与可导出的 Markdown Wiki，而不是每次从 chunk 临时拼接答案。
 
+## 给 AI 的轻量双语检索
+
+默认使用本地 SQLite 检索。调用方 AI 提供原问题和中英文关键词，即可一次取回去重后的帖子及证据，不需要准备本地模型：
+
+```text
+search_forum_batch(
+  query="如何使用 ts_backfill 处理缺失值？",
+  query_variants=["缺失值 ts_backfill", "missing values ts_backfill"],
+  top_k=6,
+  evidence_chars=600,
+  max_evidence_chars=6000
+)
+```
+
+工具保留实际命中查询、语言粗标记、片段 ID、内容版本与原文坐标。只在缺少上下文时调用 `get_forum_evidence` 读取该命中的邻块，需要完整讨论再用 `get_post`。语言标记和排序分数不代表事实可信度；本地搜索也不保证两种语言都有相关内容。翻译与问题理解由调用方 AI 完成，工具只执行有界的本地检索。
+
+CLI 使用相同流程：
+
+```bash
+uv run forum-rag search-batch "如何使用 ts_backfill 处理缺失值？" \
+  --variant "缺失值 ts_backfill" --variant "missing values ts_backfill" \
+  --db .cache/forum.sqlite3
+uv run forum-rag forum-evidence "<返回的 chunk_id>" --db .cache/forum.sqlite3 \
+  --expected-content-hash "<返回的 chunk_content_hash>" --max-chars 6000
+```
+
+最多接受三个附加查询；证据字符预算用于控制原文片段长度，不等同于整个 JSON 或 token 数量。调用方应检查超时、锁、索引降级和截断状态，避免将有界未命中解释成论坛没有答案。已有 MCP 客户端需要重启后才能看到新增工具。
+
 ## 从零开始：得到第一个结果
 
 ### 1. 安装并建立官方文档索引
@@ -82,7 +110,9 @@ uv run forum-rag search "alpha decay neutralization" --top-k 5
 uv run forum-rag show 12913566170391
 ```
 
-如需更强的本地语义召回，可安装可选依赖：
+默认检索不加载本地模型，也无需安装模型依赖。中英文查询由调用方 AI 提供，可通过 `search_forum_batch` 一次提交。
+
+以下可选依赖仅保留给已有代码层 embedding 后端调用；安装后不会启用独立语义召回，也不会新增 MCP 工具：
 
 ```bash
 uv sync --extra local-embeddings
@@ -117,7 +147,6 @@ python -m pip install -e ".[local-embeddings]"
 
 - **论坛索引：** 解析 community、topic、author、时间、投票/评论等轻量元数据，并从 HTML 清洗正文文本。
 - **增量更新：** `index` 会根据源 JSON 的路径、mtime 与 size 跳过未变更文件；替换导出或需要强制刷新时使用 `--rebuild`。`refresh` 则把论坛索引和来源 manifest 提交组合为一步。
-- **候选检索与排序：** SQLite FTS5 召回关键词候选；中文子串及缺少 FTS 时走有数量上限的字面查询，兼容已有索引。正常无命中返回空结果，索引错误向上传递。默认 256 维哈希向量只辅助词法排序，不具备模型级同义理解能力；可选 embedding 接口不等于独立语义召回。
 - **精确/近邻查询：** `find_by_exact` 面向 topic id、URL、标题、正文、评论与 chunk 的精确词命中；`related_posts` 基于标题寻找同社区相关主题。
 
 首次显式重建论坛索引：
@@ -151,7 +180,21 @@ uv run forum-rag index \
 
 所有命令均可通过 `--db .cache/forum.sqlite3` 指定索引文件；默认路径也是 `.cache/forum.sqlite3`。
 
+### 可选中文候选索引
+
+中文 bigram 候选索引默认关闭，无需模型或新增依赖。需要 SQLite 3.43 或更新版本；可先在数据库副本上显式构建：
+
+```bash
+uv run forum-rag search-reindex --db /path/to/forum.sqlite3 --chinese
+```
+
+构建后，在 MCP 服务进程的环境中设置 `FORUM_RAG_CHINESE_INDEX=1` 并重新连接客户端，才会启用中文候选路径。取消该环境变量即可恢复原路径；原 FTS 索引仍保留。缺少完整中文索引时沿用原路径，普通查询不会建索引或写库。
+
+该路径要求查询中的每段连续中文在原字段中完整出现，多段按 AND 匹配；英文与代码部分只做字面子串检查，不提供翻译、词边界或语义理解。现有排序公式保持不变，候选仍有数量上限。索引会增加磁盘占用；启用前应核对自己的查询效果，当前不承诺整体准确率提升。
+
 ### 官方文档源
+
+按完整标题搜索文档时（例如 `Operators`），完整标题命中优先返回，结果中的 `exact_title_match` 会标明这一点。`score` 保留原检索分数，完整标题以外的结果沿用原排序；分数不是置信概率。
 
 `ingest-docs` 是增量操作：相同内容按 `content_hash` 跳过，默认会 prune 数据库中目录已不存在的文档。
 
@@ -218,11 +261,12 @@ Claude Desktop 或其他兼容 MCP 客户端的配置示例：
 Windows 下将可执行文件路径改为 `...\envs\forum-rag\Scripts\forum-rag-mcp.exe`。
 
 <details>
-<summary><strong>查看全部 20 个 MCP 工具</strong></summary>
+<summary><strong>查看全部 22 个 MCP 工具</strong></summary>
 
 | 分组 | 工具 |
 | --- | --- |
 | 论坛检索 | `search_forum(query, db=None, top_k=5)`<br>`get_post(topic_id, db=None)`<br>`find_by_exact(value, db=None, community=None, top_k=5)`<br>`related_posts(topic_id, db=None, top_k=5)` |
+| 批量证据 | `search_forum_batch(query, query_variants=None, db=None, top_k=6, evidence_chars=600, max_evidence_chars=6000)`<br>`get_forum_evidence(chunk_id, db=None, before=1, after=1, max_chars=6000, expected_content_hash=None)` |
 | 官方文档 | `search_docs(query, db=None, top_k=5)`<br>`get_doc(slug, db=None)`<br>`ingest_docs(directory, db=None, rebuild=False, prune=True)` |
 | 来源管理 | `source_status(source, db=None)`<br>`source_ingest_plan(source, db=None, commit=False)` |
 | 知识层 | `build_evolution_context(query, db=None, top_k=5)`<br>`propose_knowledge_page(slug, title, summary, body, source_topic_ids, confidence, db=None, links=None, auto_publish=True, source_evidence=None)`<br>`search_knowledge(query, db=None, top_k=5, include_drafts=False)`<br>`get_knowledge_page(slug, db=None)`<br>`link_knowledge_pages(source_slug, target_slug, relation_type, db=None, weight=1.0, confidence=0.8)`<br>`lint_knowledge(db=None, slug=None)`<br>`publish_knowledge_page(slug, db=None)`<br>`graph_query(slug, db=None, depth=1, relation_type=None)`<br>`export_knowledge_wiki(db=None, output_dir=".cache/wiki", include_drafts=False)` |
@@ -257,7 +301,7 @@ PYTHONPATH=src python scripts/evaluate_search.py \
   --transport mcp --repeats 3 --output /tmp/search-report.json
 ```
 
-脚本记录语料规模、源码指纹、已知目标召回、无答案误返回和首次/重复调用耗时。默认 60 条检查针对本项目的本地导出构造；它们不是完整的人工相关性标注，不能据此声称通用准确率。请用 `--cases` 提供符合你自己数据的标注。首次调用也不代表操作系统冷缓存。参见 [本轮验证记录](docs/search-quality-verification.md)。
+脚本记录语料规模、源码指纹、已知目标召回、无答案误返回和首次/重复调用耗时。默认 60 条检查针对本项目的本地导出构造；它们不是完整的人工相关性标注，不能据此声称通用准确率。请用 `--cases` 提供符合你自己数据的标注。首次调用也不代表操作系统冷缓存。评测输出请保存在本地，不提交生成的报告和日志。
 
 知识页仍写入同一 SQLite，相关表包括：
 
@@ -281,9 +325,12 @@ uv run forum-rag knowledge-export --out .cache/wiki
 
 拉取新代码后，以下步骤是幂等的：
 
+本次升级将官方 MCP Python SDK 从 1.x 更新为 2.x，需要同步依赖并重启 MCP 客户端。已有 SQLite 索引无需重建；stdio 启动命令和工具参数保持不变。
+
 ```bash
 cd /path/to/forum-rag
 git pull
+uv sync
 uv run forum-rag ingest-docs Documents
 ```
 
@@ -291,6 +338,7 @@ Conda 环境中，先激活环境，再运行：
 
 ```bash
 conda activate forum-rag
+python -m pip install -e .
 forum-rag ingest-docs Documents
 ```
 
@@ -312,10 +360,26 @@ uv run forum-rag ingest-docs Documents
 
 再从 MCP 客户端调用 `search_docs("neutralization")` 或 `get_doc("operators")`。若新工具仍不可见，优先检查客户端是否已重启，其次检查 `command` / `args` 是否指向正确的仓库目录。
 
+## 自动化任务的进程保护
+
+长时间运行的测试、评测等自动化任务可通过 `scripts/run_bounded_task.py` 设置租约和时限。调用方先创建租约文件，在仍管理任务时持续更新其修改时间；工作进程不得自行续租。
+
+```bash
+# 由调用方创建并续租；此示例本身不会自动续租
+touch /tmp/forum-rag-task.lease
+uv run python scripts/run_bounded_task.py \
+  --lease-file /tmp/forum-rag-task.lease --lease-ttl 30 --timeout 600 \
+  -- python -m pytest -q
+```
+
+默认 30 秒无续租，或达到总时限，就停止该任务的整个进程组。停止续租或删除租约可以取消任务；正常结束也会清理遗留子进程。监管进程被强杀时，独立监控进程会通过控制管道断开回收任务组。
+
+租约文件必须在启动前存在且未过期；长任务需要调用方续租。该工具使用 POSIX 进程组，适用于 macOS/Linux，不覆盖主动脱离进程组的程序。
+
 ## 当前范围与后续方向
 
 已实现：本地 JSON 解析、SQLite 原帖与 chunk 索引、Markdown 文档摄入、FTS5 + hybrid search、来源 manifest、知识页与来源绑定、typed graph、Wiki 导出、backlink boost 与 embedding cache。
 
-暂未实现：独立的模型语义召回及其完整准确率评测、PDF/截图/音频/视频等多模态摄入、定时或 always-on ingestion、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
+暂未实现：真人标注的完整准确率评测、PDF/截图/音频/视频等多模态摄入、定时或 always-on ingestion、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
 
 对外 CLI / MCP contract 与内部 `parser`、`storage`、`search` 模块解耦；后续替换 embedding backend 或调优 chunk/search 策略，不应改变既有 CLI/MCP 接口。

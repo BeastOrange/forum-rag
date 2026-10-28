@@ -107,9 +107,10 @@ def show_command(
 @app.command("search-reindex")
 def search_reindex_command(
     db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+    chinese: bool = typer.Option(False, "--chinese", help="Build the optional Chinese candidate index"),
 ) -> None:
     try:
-        console.print_json(data=rebuild_search_index(db_path))
+        console.print_json(data=rebuild_search_index(db_path, chinese=chinese))
     except sqlite3.OperationalError as exc:
         try:
             raise_if_database_locked(exc, db_path)
@@ -250,6 +251,60 @@ def show_doc_command(
     if document is None:
         raise typer.Exit(code=1)
     console.print_json(data=document)
+
+
+@app.command("search-batch")
+def search_batch_command(
+    query: str = typer.Argument(...),
+    query_variants: list[str] | None = typer.Option(None, "--variant", help="Repeat for caller-provided Chinese/English keywords; at most three"),
+    db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+    top_k: int = typer.Option(6, "--top-k", min=1, max=20),
+    evidence_chars: int = typer.Option(600, "--evidence-chars", min=100, max=2000),
+    max_evidence_chars: int = typer.Option(6000, "--max-evidence-chars", min=200, max=20000),
+) -> None:
+    """Batch local queries and return compact, traceable evidence without a model."""
+    from .batch_search import search_forum_batch
+    try:
+        result = search_forum_batch(db_path, query, query_variants=query_variants, top_k=top_k,
+                                   evidence_chars=evidence_chars, max_evidence_chars=max_evidence_chars)
+    except TimeoutError as exc:
+        console.print_json(data={"status": "timeout", "query": query, "results": [], "reason": str(exc)})
+        return
+    except sqlite3.OperationalError as exc:
+        try:
+            raise_if_database_locked(exc, db_path)
+        except ForumDatabaseBusyError as busy:
+            _print_busy(busy, query=query, results=[])
+            return
+        raise
+    console.print_json(data=result)
+
+
+@app.command("forum-evidence")
+def forum_evidence_command(
+    chunk_id: str = typer.Argument(...),
+    db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+    before: int = typer.Option(1, "--before", min=0, max=2),
+    after: int = typer.Option(1, "--after", min=0, max=2),
+    max_chars: int = typer.Option(6000, "--max-chars", min=100, max=20000),
+    expected_content_hash: str | None = typer.Option(None, "--expected-content-hash"),
+) -> None:
+    """Read a bounded evidence window from one thread."""
+    from .batch_search import get_forum_evidence
+    try:
+        result = get_forum_evidence(db_path, chunk_id, before=before, after=after,
+                                   max_chars=max_chars, expected_content_hash=expected_content_hash)
+    except TimeoutError as exc:
+        console.print_json(data={"status": "timeout", "chunk_id": chunk_id, "evidence": [], "reason": str(exc)})
+        return
+    except sqlite3.OperationalError as exc:
+        try:
+            raise_if_database_locked(exc, db_path)
+        except ForumDatabaseBusyError as busy:
+            _print_busy(busy, chunk_id=chunk_id, evidence=[])
+            return
+        raise
+    console.print_json(data=result)
 
 
 def main() -> None:
