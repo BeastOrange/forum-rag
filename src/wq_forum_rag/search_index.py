@@ -10,6 +10,7 @@ import re
 import sqlite3
 import threading
 from collections import OrderedDict
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +73,7 @@ def init_search_schema(conn: sqlite3.Connection) -> bool:
 def rebuild_search_index(db_or_conn: str | Path | sqlite3.Connection, *, chinese: bool = False) -> dict[str, Any]:
     if isinstance(db_or_conn, sqlite3.Connection):
         return _rebuild_with_conn(db_or_conn, chinese=chinese)
-    with sqlite3.connect(db_or_conn) as conn:
+    with closing(sqlite3.connect(db_or_conn)) as conn, conn:
         conn.row_factory = sqlite3.Row
         return _rebuild_with_conn(conn, chinese=chinese)
 
@@ -85,7 +86,7 @@ def fts_candidates(
     limit: int = 200,
     include_drafts: bool = False,
 ) -> list[str]:
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.row_factory = sqlite3.Row
         return _cached_candidate_ids(conn, query, kind=kind, limit=limit, include_drafts=include_drafts)
 
