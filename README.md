@@ -347,6 +347,19 @@ uv run python scripts/build_semantic_index.py \
 
 基础模式无需执行以上步骤。官方源和国内源本机均完成了固定版本小文件下载及哈希验证；完整大权重在两条网络路径上的可用性未重复验证。
 
+交互终端中的构建默认单线程运行。自动化或 Agent 的非交互构建必须传入 `--lease-file`：由仍在管理任务的调用方先创建该文件，并持续更新其修改时间；工作进程不得自行续租。默认 30 秒无续租或达到 600 秒预算，就停止该构建的整个进程组。可用 `--lease-ttl`（最多 120 秒）和 `--timeout`（最多 86400 秒）调整预算。监管进程被强杀时，独立监控进程会通过控制管道断开回收任务组。
+
+```bash
+# 由调用方创建并续租；此示例本身不会自动续租
+uv run python scripts/build_semantic_index.py \
+  --db .cache/forum.sqlite3 --model-dir .cache/models/minilm \
+  --index-dir .cache/semantic-v2 --threads 1 \
+  --lease-file /tmp/forum-rag-build.lease --timeout 600 --lease-ttl 30
+```
+
+租约文件必须在启动前存在且未过期。停止续租或删除租约即可取消；正常结束也会清理遗留子进程。该保护目前使用 POSIX 进程组，适用于 macOS/Linux；不覆盖主动脱离进程组的程序。确实由使用者自行管理的非交互前台任务可显式传 `--foreground`，此时不提供租约和时限保护。不要用此选项启动无人管理的后台任务。
+
+
 本轮 Agent 审核已对 14 条查询、158 项候选逐条判断，并运行评测。结论是**暂不默认启用当前语义模型**：部分排序指标改善，但 RAG 核心查询仍漏召回，两条模板负例均返回无关内容。这是机器审核和有限候选池的暂定结论，不是真人准确率，也不证明整个语料的召回率。
 
 
