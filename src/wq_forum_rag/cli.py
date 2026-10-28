@@ -107,9 +107,10 @@ def show_command(
 @app.command("search-reindex")
 def search_reindex_command(
     db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+    chinese: bool = typer.Option(False, "--chinese", help="Build the optional Chinese candidate index"),
 ) -> None:
     try:
-        console.print_json(data=rebuild_search_index(db_path))
+        console.print_json(data=rebuild_search_index(db_path, chinese=chinese))
     except sqlite3.OperationalError as exc:
         try:
             raise_if_database_locked(exc, db_path)

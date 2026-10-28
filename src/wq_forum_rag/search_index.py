@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 import threading
@@ -12,6 +13,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
+from wq_forum_rag import chinese_index
 from wq_forum_rag.search import tokenize_text
 
 _candidate_cache: OrderedDict[tuple, tuple[str, ...]] = OrderedDict()
@@ -67,12 +69,12 @@ def init_search_schema(conn: sqlite3.Connection) -> bool:
         return False
 
 
-def rebuild_search_index(db_or_conn: str | Path | sqlite3.Connection) -> dict[str, Any]:
+def rebuild_search_index(db_or_conn: str | Path | sqlite3.Connection, *, chinese: bool = False) -> dict[str, Any]:
     if isinstance(db_or_conn, sqlite3.Connection):
-        return _rebuild_with_conn(db_or_conn)
+        return _rebuild_with_conn(db_or_conn, chinese=chinese)
     with sqlite3.connect(db_or_conn) as conn:
         conn.row_factory = sqlite3.Row
-        return _rebuild_with_conn(conn)
+        return _rebuild_with_conn(conn, chinese=chinese)
 
 
 def fts_candidates(
@@ -93,7 +95,7 @@ def _cached_candidate_ids(conn: sqlite3.Connection, query: str, *, kind: str, li
     # Only fts_candidates' freshly opened, privately owned connection uses this
     # cache. Arbitrary caller connections can hold implicit SELECT snapshots.
     state = _candidate_state(conn)
-    key = (state, query, kind, limit, include_drafts)
+    key = (state, query, kind, limit, include_drafts, os.environ.get("FORUM_RAG_CHINESE_INDEX"))
     if state is not None:
         with _candidate_lock:
             if key in _candidate_cache:
@@ -128,6 +130,9 @@ def _candidate_ids_uncached(conn: sqlite3.Connection, query: str, *, kind: str, 
     required = {"forum_chunk": ("chunks", "topics"), "doc_chunk": ("doc_chunks", "documents"), "knowledge_page": ("knowledge_pages",)}
     if kind in required and not all(_table_exists(conn, table) for table in required[kind]):
         return []
+    if (os.environ.get("FORUM_RAG_CHINESE_INDEX") == "1" and chinese_index.segments(query)
+            and chinese_index.complete(conn)):
+        return chinese_index.candidates(conn, query, kind, limit, include_drafts)
     available = _table_exists(conn, "document_fts")
     chinese = re.findall(r"[\u4e00-\u9fff]+", query)
     fts_limit = max(1, limit // 2) if chinese and limit > 1 else limit
@@ -169,34 +174,52 @@ def _candidate_ids_uncached(conn: sqlite3.Connection, query: str, *, kind: str, 
     return ids
 
 
-def _rebuild_with_conn(conn: sqlite3.Connection) -> dict[str, Any]:
-    if not init_search_schema(conn):
-        return {
-            "fts_available": False,
-            "forum_docs": 0,
-            "knowledge_docs": 0,
-            "doc_chunks": 0,
-            "indexed_documents": 0,
-        }
-    rows = _forum_rows(conn) + _knowledge_rows(conn) + _doc_rows(conn)
-    conn.execute("DELETE FROM document_fts")
-    conn.executemany(
-        """
-        INSERT INTO document_fts(kind, record_id, topic_id, title, community, content)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        rows,
-    )
-    forum_docs = sum(1 for row in rows if row[0] == "forum_chunk")
-    knowledge_docs = sum(1 for row in rows if row[0] == "knowledge_page")
-    doc_chunks = sum(1 for row in rows if row[0] == "doc_chunk")
-    return {
-        "fts_available": True,
-        "forum_docs": forum_docs,
-        "knowledge_docs": knowledge_docs,
-        "doc_chunks": doc_chunks,
-        "indexed_documents": len(rows),
-    }
+def _rebuild_with_conn(conn: sqlite3.Connection, *, chinese: bool = False) -> dict[str, Any]:
+    # Keep a caller-owned connection in a transaction, as the old rebuild did.
+    if not conn.in_transaction:
+        conn.execute("BEGIN")
+    conn.execute("SAVEPOINT search_reindex")
+    try:
+        if not init_search_schema(conn):
+            conn.execute("ROLLBACK TO search_reindex")
+            conn.execute("RELEASE search_reindex")
+            return {"fts_available": False, "forum_docs": 0, "knowledge_docs": 0,
+                    "doc_chunks": 0, "indexed_documents": 0}
+        sync_chinese = chinese or chinese_index.table_exists(conn, 'chinese_fts_v2')
+        if sync_chinese:
+            chinese_index.create(conn)
+        if sync_chinese:
+            conn.execute('DELETE FROM chinese_index_meta WHERE version=2')
+            conn.execute('DELETE FROM chinese_fts_v2')
+            conn.execute('DELETE FROM chinese_index_rows')
+        conn.execute('DELETE FROM document_fts')
+        counts = {'forum_chunk': 0, 'knowledge_page': 0, 'doc_chunk': 0}
+        sources = [
+            (('chunks', 'topics'), "SELECT 'forum_chunk', c.chunk_id, c.topic_id, t.title, t.community_title, c.content FROM chunks c JOIN topics t ON t.topic_id=c.topic_id WHERE c.chunk_level=1"),
+            (('knowledge_pages',), "SELECT 'knowledge_page', slug, slug, title, status, summary || char(10) || body FROM knowledge_pages"),
+            (('doc_chunks', 'documents'), "SELECT 'doc_chunk', c.chunk_id, c.slug, d.title, 'docs', c.content FROM doc_chunks c JOIN documents d ON d.slug=c.slug ORDER BY c.slug, c.chunk_index"),
+        ]
+        for tables, sql in sources:
+            if not all(_table_exists(conn, table) for table in tables):
+                continue
+            cursor = conn.execute(sql)
+            while batch := cursor.fetchmany(128):
+                rows = [tuple(row) for row in batch]
+                conn.executemany('INSERT INTO document_fts(kind, record_id, topic_id, title, community, content) VALUES (?, ?, ?, ?, ?, ?)', rows)
+                if sync_chinese:
+                    chinese_index.insert_rows(conn, rows)
+                for row in rows:
+                    counts[row[0]] += 1
+        if sync_chinese:
+            conn.execute('INSERT INTO chinese_index_meta(version, complete) VALUES (2, 1)')
+        conn.execute("RELEASE search_reindex")
+    except BaseException:
+        conn.execute("ROLLBACK TO search_reindex")
+        conn.execute("RELEASE search_reindex")
+        raise
+    return {"fts_available": True, "forum_docs": counts['forum_chunk'],
+            "knowledge_docs": counts['knowledge_page'], "doc_chunks": counts['doc_chunk'],
+            "indexed_documents": sum(counts.values())}
 
 
 def _query_fts(conn: sqlite3.Connection, kind: str, match_query: str, limit: int, include_drafts: bool):

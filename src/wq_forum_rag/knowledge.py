@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from wq_forum_rag import chinese_index
 from wq_forum_rag.models import hash_text, normalize_text
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._/-]{1,120}$")
@@ -331,6 +332,7 @@ class KnowledgeStore:
         return str(row[0]) if row else ""
 
     def _sync_fts(self, slug: str) -> None:
+        chinese_index.sync_knowledge(self.conn, slug)
         if not self._table_exists("document_fts"):
             return
         self.conn.execute("DELETE FROM document_fts WHERE kind = 'knowledge_page' AND record_id = ?", (slug,))
