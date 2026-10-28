@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 import sqlite3
 from typing import Any
 
@@ -85,6 +86,11 @@ def search_knowledge_records(
     return _knowledge_results(hits, pages, _knowledge_link_counts(conn), top_k)
 
 
+def _doc_title_key(value: str) -> str:
+    # Match lexical search's Unicode lowercase handling and normalize spacing.
+    return " ".join((value or "").lower().split())
+
+
 def search_doc_records(
     conn: sqlite3.Connection,
     query: str,
@@ -114,6 +120,10 @@ def search_doc_records(
         dense_weight=0.55,
         lexical_weight=0.45,
     ).search(query=query, top_k=len(rows))
+    title_key = _doc_title_key(query)
+    # A named-document lookup has direct evidence stronger than hash similarity.
+    # Keep the existing score/order inside each tier instead of inventing weights.
+    hits.sort(key=lambda hit: _doc_title_key(hit.title) != title_key)
     meta = {row["slug"]: row for row in rows}
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -129,6 +139,7 @@ def search_doc_records(
                 "source_path": row["source_path"],
                 "snippet": hit.snippet,
                 "score": hit.score,
+                "exact_title_match": _doc_title_key(row["title"]) == title_key,
             }
         )
         if len(results) >= top_k:
@@ -241,9 +252,38 @@ def _doc_detail_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 
 def _doc_candidate_rows(conn: sqlite3.Connection, query: str, *, top_k: int) -> list[dict[str, Any]]:
-    from wq_forum_rag.search_index import candidate_ids
+    from wq_forum_rag.search_index import _table_exists, candidate_ids
 
-    ids = candidate_ids(conn, query, kind="doc_chunk", limit=top_k)
+    if not _table_exists(conn, "documents") or not _table_exists(conn, "doc_chunks"):
+        return []
+    title_key = _doc_title_key(query)
+    exact_slugs = []
+    # Stream title metadata only; registering a SQLite function on a caller's
+    # connection would fail if it already has an active cursor.
+    with closing(conn.execute("SELECT slug, title FROM documents ORDER BY slug")) as titles:
+        for slug, title in titles:
+            if _doc_title_key(title) == title_key:
+                exact_slugs.append(slug)
+                if len(exact_slugs) >= top_k:
+                    break
+    # Reserve a bounded candidate slot for each exact title, even if the FTS
+    # budget omitted it. Fetch one initial chunk per document, never its body.
+    exact = []
+    if exact_slugs:
+        marks = ",".join("?" for _ in exact_slugs)
+        exact = conn.execute(f"""
+        SELECT c.chunk_id
+        FROM documents d JOIN doc_chunks c ON c.chunk_id = (
+            SELECT first.chunk_id FROM doc_chunks first WHERE first.slug=d.slug
+            ORDER BY first.chunk_index, first.chunk_id LIMIT 1
+        )
+        WHERE d.slug IN ({marks})
+        ORDER BY d.slug LIMIT ?
+        """, (*exact_slugs, top_k)).fetchall()
+    ids = list(dict.fromkeys(
+        [str(row[0]) for row in exact]
+        + candidate_ids(conn, query, kind="doc_chunk", limit=top_k)
+    ))[:top_k]
     if not ids:
         return []
     placeholders = ",".join("?" for _ in ids)

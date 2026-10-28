@@ -182,6 +182,8 @@ uv run forum-rag index \
 
 ### 官方文档源
 
+按完整标题搜索文档时（例如 `Operators`），完整标题命中优先返回，结果中的 `exact_title_match` 会标明这一点。`score` 保留原检索分数，完整标题以外的结果沿用原排序；分数不是置信概率。
+
 `ingest-docs` 是增量操作：相同内容按 `content_hash` 跳过，默认会 prune 数据库中目录已不存在的文档。
 
 ```bash
