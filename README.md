@@ -310,9 +310,12 @@ uv run forum-rag knowledge-export --out .cache/wiki
 
 拉取新代码后，以下步骤是幂等的：
 
+本次升级将官方 MCP Python SDK 从 1.x 更新为 2.x，需要同步依赖并重启 MCP 客户端。已有 SQLite 索引无需重建；stdio 启动命令和工具参数保持不变。
+
 ```bash
 cd /path/to/forum-rag
 git pull
+uv sync
 uv run forum-rag ingest-docs Documents
 ```
 
@@ -320,6 +323,7 @@ Conda 环境中，先激活环境，再运行：
 
 ```bash
 conda activate forum-rag
+python -m pip install -e .
 forum-rag ingest-docs Documents
 ```
 

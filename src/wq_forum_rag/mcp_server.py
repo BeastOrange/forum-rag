@@ -11,6 +11,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from mcp.server.mcpserver import MCPServer
+
 from .cli import DEFAULT_DB_PATH, ForumIndexService
 from .documents import DocumentStore, ingest_documents
 from .evolution import EvolutionService
@@ -20,25 +22,6 @@ from .search_cache import CachedEmbeddingBackend
 from .search_index import rebuild_search_index as rebuild_search_index_impl
 from .search_records import search_doc_records, search_knowledge_records
 from .storage import ForumStore
-
-try:
-    from mcp.server.fastmcp import FastMCP
-except ModuleNotFoundError:  # pragma: no cover
-    class FastMCP:  # type: ignore[override]
-        def __init__(self, name: str, **_: Any) -> None:
-            self.name = name
-            self.tools: dict[str, Any] = {}
-
-        def tool(self, **_: Any):
-            def decorator(func: Any) -> Any:
-                self.tools[func.__name__] = func
-                return func
-
-            return decorator
-
-        def run(self, transport: str = "stdio") -> None:
-            raise RuntimeError(f"mcp is not installed; cannot run transport={transport}")
-
 
 def _resolve_db_path(db: str | None) -> Path:
     configured_db = os.environ.get("FORUM_RAG_DB") or os.environ.get("WQ_FORUM_RAG_DB")
@@ -520,12 +503,12 @@ def ingest_docs(
     return {**result, "search_index": search_index}
 
 
-def build_mcp_server(default_db: str | Path | None = None) -> FastMCP:
+def build_mcp_server(default_db: str | Path | None = None) -> MCPServer:
     if default_db and not (
         os.environ.get("FORUM_RAG_DB") or os.environ.get("WQ_FORUM_RAG_DB")
     ):
         os.environ["FORUM_RAG_DB"] = str(default_db)
-    server = FastMCP("forum-rag", json_response=True)
+    server = MCPServer("forum-rag")
     server.tool()(search_forum)
     server.tool()(search_forum_batch)
     server.tool()(get_forum_evidence)

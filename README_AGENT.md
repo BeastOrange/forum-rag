@@ -69,9 +69,12 @@ If the user provides an existing SQLite database, do not reindex unless asked. P
 
 If the user already had a working MCP setup and just ran `git pull`, perform exactly these steps (all idempotent — safe to run twice):
 
+This release upgrades the official MCP Python SDK from 1.x to 2.x. Synchronize dependencies before restarting the MCP client. The existing SQLite index does not need rebuilding; stdio commands and tool arguments are unchanged.
+
 ```bash
 # 1. Verify you are in the project root
 cd /absolute/path/to/forum-rag
+uv sync
 
 # 2. Ingest the markdown docs shipped in repo.
 #    - New tables `documents` / `doc_chunks` are created lazily; existing
@@ -89,6 +92,7 @@ For an existing Conda installation, activate its environment and use the install
 
 ```bash
 conda activate forum-rag
+python -m pip install -e .
 forum-rag ingest-docs Documents
 ```
 
@@ -96,8 +100,6 @@ Only rerun `python -m pip install -e .` for a Conda installation when the upgrad
 
 Do NOT attempt these on upgrade — they are not required and may waste time:
 
-- `uv sync` — no new dependencies were added.
-- Reinstall `pip install -e .` — installed package is already editable.
 - Delete or migrate `forum.sqlite3` — schema additions are backward compatible.
 - Re-run `refresh` on the forum JSON — forum data is untouched by this upgrade.
 

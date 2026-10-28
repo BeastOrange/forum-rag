@@ -90,9 +90,9 @@ async def run(args, db, queries):
             async def call(query):
                 arguments = {'db': str(db), 'query': query, 'top_k': args.top_k}
                 response = await session.call_tool('search_forum', arguments)
-                if response.isError:
+                if response.is_error:
                     raise RuntimeError(str(response.content))
-                return response.structuredContent or json.loads(response.content[0].text)
+                return response.structured_content or json.loads(response.content[0].text)
             return await runs(call, args, queries, time.perf_counter() - startup)
 
 

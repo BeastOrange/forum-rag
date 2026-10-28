@@ -150,9 +150,9 @@ async def evaluate(db, cases, repeats, top_k, transport):
                 name, key = {"forum": ("search_forum", "query"), "exact": ("find_by_exact", "value"),
                              "docs": ("search_docs", "query")}[case["kind"]]
                 result = await session.call_tool(name, {key: case["query"], "top_k": count})
-                if result.isError:
+                if result.is_error:
                     raise RuntimeError(str(result.content))
-                return result.structuredContent or json.loads(result.content[0].text)
+                return result.structured_content or json.loads(result.content[0].text)
 
             return await _run_cases(cases, call, repeats, top_k)
 
