@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from functools import lru_cache
 from pathlib import Path
 
@@ -36,7 +37,7 @@ class CachedEmbeddingBackend:
         self.backend_id = backend_id or _backend_id(self.backend)
         self.writable = writable
         if self.writable:
-            with sqlite3.connect(self.db_path) as conn:
+            with closing(sqlite3.connect(self.db_path)) as conn, conn:
                 init_search_schema(conn)
 
     def embed_query(self, text: str) -> list[float]:
@@ -45,7 +46,7 @@ class CachedEmbeddingBackend:
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float] | None] = []
         misses: list[tuple[int, str, str]] = []
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             for index, text in enumerate(texts):
                 content_hash = hash_text(text)
                 cached = self._cached_vector(conn, content_hash)
@@ -113,7 +114,7 @@ class CachedEmbeddingBackend:
 def embedding_cache_count(db_path: str | Path) -> int:
     from wq_forum_rag.search_index import init_search_schema
 
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         init_search_schema(conn)
         return int(conn.execute("SELECT COUNT(*) FROM embedding_cache").fetchone()[0])
 
