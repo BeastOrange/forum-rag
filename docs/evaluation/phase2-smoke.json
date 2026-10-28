@@ -1,0 +1,1988 @@
+{
+  "metadata": {
+    "time_utc": "2026-10-28T00:08:07.374521+00:00",
+    "python": "3.12.12",
+    "sqlite": "3.50.4",
+    "source_directory": "/Users/orange/.lody/repos/local---d5cb21b4a3ca/worktrees/18d12279-6d3c-4cff-8d8c-e5bf5c60b2d9/src/wq_forum_rag",
+    "database": "/private/tmp/forum-rag-verification.sqlite3",
+    "database_size": 627122176,
+    "database_mtime_ns": 1793104675307958682,
+    "counts": {
+      "topics": 9023,
+      "chunks": 54950,
+      "documents": 74,
+      "doc_chunks": 228,
+      "knowledge_pages": 0
+    },
+    "cached_backends": [
+      {
+        "backend_id": "HashEmbeddingBackend|dims=256|seed=wq-forum-rag-v1",
+        "count": 8390
+      }
+    ],
+    "source_hashes": {
+      "__init__.py": "cee5d70429d0afc4a686bc950a5d449aff01773a533f8dbe6b9df4802a0bf5de",
+      "cli.py": "bffe16a66eab9258fe79d6b347e20e0570ff8e8e81db07b70031d9c3ec654e6a",
+      "documents.py": "86414bef39196f8f13f333accfa06cbdbccab500e9675a40ff22b2936f09042b",
+      "embeddings.py": "c0689561b239c17d9369644aed6f239323b16ef244bb58b6f6c17b8b83db6006",
+      "evolution.py": "7ebe803a86f7877e2447672e9f1158f94cf1371dcc0e99ad2494832b6081be3f",
+      "evolution_cli.py": "52218edb21954824b47692b2369103cbe7d8321e3a4999dce8e3ba2a22499b91",
+      "indexer.py": "0e50a4d4b19381e7c3d1ca07054a2ea88936ed675d4132047d90d80fc842dcfe",
+      "knowledge.py": "d2145a89522b0ec91f7ed617fa1b74ac5eb75cc9cb195663ff8e1977313f5b59",
+      "knowledge_quality.py": "7c640f6d1ce752b9ec675b46b034da8a13617ac94d591dcc91cd91a09e9fd06c",
+      "manifest.py": "036b55b9db1974b058bbb7a7bd41ff42fcaa17601c298925e94a808837a08eca",
+      "mcp_server.py": "5768113c9cdb9a27c8c89076b02944ea11de40085176ab3c3385f14bd9b8ff35",
+      "models.py": "d78546e1478ee8d45d9c4c5c14636b9e8fc937b80193817f35ce042e4fc4281d",
+      "parser.py": "7c94d03d26bd03747fb47203e1843ff0ddb0385795e6c87137f9f39ce40167c9",
+      "search.py": "dfaa3be25e15e64b3d7a35ae72ac0e0be4b5c411a18b5afe508add3155405325",
+      "search_cache.py": "db5341c7896bb96640d17bdb310237d17be31cbce1601577411ce4d7c893950f",
+      "search_index.py": "096980a64bd45219c64bfb9e63f0b599c7087ce2bdbf998cc25c06a344a89e17",
+      "search_records.py": "7e7b9ceb648eb101e0f3c51df4333735eee87cef85c5ac888b4348d04a11c233",
+      "semantic_index.py": "32e4985108193ff6e83546d5abcf4024b1345e768f4c9cbb75b997e79da59d44",
+      "semantic_retrieval.py": "cd807480c173d1d991c8424a6013fd4132d160173f068dac643a0285dc197365",
+      "source_cli.py": "2a60a2762e5f9b1d6f420bed3ffe1b293201d6781ad7cf185f2844a0e88474ad",
+      "storage.py": "0ecd4ee0295e3bf96f2ab16a1f15880ac3f85bab8b2b286511f8090632cdb108",
+      "wiki.py": "6d790832f0785c6407a98ed6750c298c6213b26afa90a898311f5f213121e715"
+    }
+  },
+  "label_notes": "Coordinator-curated, source-derived known-target smoke probes for the 2026-10-27 local export. Not an exhaustive or human-annotated semantic relevance benchmark. Known-target recall measures only the listed source IDs; negative cases are empty strings and invented identifiers. Do not infer production precision from this set.",
+  "transport": "mcp",
+  "top_k": 5,
+  "repeats": 2,
+  "limitations": [
+    "Source-derived known targets are not exhaustive human relevance labels.",
+    "First calls are not OS-cold measurements; small-sample p95 is descriptive."
+  ],
+  "summary": {
+    "case_count": 60,
+    "positive_case_count": 44,
+    "negative_case_count": 16,
+    "known_target_recall_at_k": 1.0,
+    "mean_reciprocal_rank": 0.8833333333333333,
+    "negative_return_rate": 0.0,
+    "negative_pass_count": 16,
+    "error_count": 0,
+    "first_call_latency_seconds": {
+      "count": 60,
+      "p50": 0.029845749988453463,
+      "p95": 0.18321074999403208,
+      "max": 1.8716685000108555
+    },
+    "repeated_latency_seconds": {
+      "count": 60,
+      "p50": 0.021754334011347964,
+      "p95": 0.0482682500150986,
+      "max": 0.05716374999610707
+    }
+  },
+  "by_kind": {
+    "docs": {
+      "case_count": 16,
+      "positive_case_count": 8,
+      "negative_case_count": 8,
+      "known_target_recall_at_k": 1.0,
+      "mean_reciprocal_rank": 0.7083333333333334,
+      "negative_return_rate": 0.0,
+      "negative_pass_count": 8,
+      "error_count": 0,
+      "first_call_latency_seconds": {
+        "count": 16,
+        "p50": 0.029013709019636735,
+        "p95": 0.21284441600437276,
+        "max": 0.21284441600437276
+      },
+      "repeated_latency_seconds": {
+        "count": 16,
+        "p50": 0.00682987502659671,
+        "p95": 0.05716374999610707,
+        "max": 0.05716374999610707
+      }
+    },
+    "exact": {
+      "case_count": 12,
+      "positive_case_count": 12,
+      "negative_case_count": 0,
+      "known_target_recall_at_k": 1.0,
+      "mean_reciprocal_rank": 1.0,
+      "negative_return_rate": null,
+      "negative_pass_count": 0,
+      "error_count": 0,
+      "first_call_latency_seconds": {
+        "count": 12,
+        "p50": 0.0020361669885460287,
+        "p95": 0.002252125006634742,
+        "max": 0.002252125006634742
+      },
+      "repeated_latency_seconds": {
+        "count": 12,
+        "p50": 0.0017763339856173843,
+        "p95": 0.0025529999984428287,
+        "max": 0.0025529999984428287
+      }
+    },
+    "forum": {
+      "case_count": 32,
+      "positive_case_count": 24,
+      "negative_case_count": 8,
+      "known_target_recall_at_k": 1.0,
+      "mean_reciprocal_rank": 0.8833333333333333,
+      "negative_return_rate": 0.0,
+      "negative_pass_count": 8,
+      "error_count": 0,
+      "first_call_latency_seconds": {
+        "count": 32,
+        "p50": 0.11307712498819456,
+        "p95": 0.21480487499502487,
+        "max": 1.8716685000108555
+      },
+      "repeated_latency_seconds": {
+        "count": 32,
+        "p50": 0.025929625000571832,
+        "p95": 0.0482682500150986,
+        "max": 0.048716749995946884
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "forum-01-title",
+      "kind": "forum",
+      "query": "【OB】一个自进化的 RAG 搜索系统🎯",
+      "expected_ids": [
+        "40089426663959"
+      ],
+      "category": "title_target",
+      "source_title": "【OB】一个自进化的 RAG 搜索系统🎯",
+      "expect_empty": false,
+      "result_ids": [
+        "40089426663959",
+        "39975714633751",
+        "41477736120983",
+        "43504234527639",
+        "42019332809111"
+      ],
+      "repeat_result_ids": [
+        [
+          "40089426663959",
+          "39975714633751",
+          "41477736120983",
+          "43504234527639",
+          "42019332809111"
+        ],
+        [
+          "40089426663959",
+          "39975714633751",
+          "41477736120983",
+          "43504234527639",
+          "42019332809111"
+        ]
+      ],
+      "seconds": [
+        1.8716685000108555,
+        0.025929625000571832
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-01-phrase",
+      "kind": "forum",
+      "query": "自进化 RAG",
+      "expected_ids": [
+        "40089426663959"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "【OB】一个自进化的 RAG 搜索系统🎯",
+      "expect_empty": false,
+      "result_ids": [
+        "40089426663959",
+        "37111825332759",
+        "44179561831447",
+        "34997332178199",
+        "37555474457495"
+      ],
+      "repeat_result_ids": [
+        [
+          "40089426663959",
+          "37111825332759",
+          "44179561831447",
+          "34997332178199",
+          "37555474457495"
+        ],
+        [
+          "40089426663959",
+          "37111825332759",
+          "44179561831447",
+          "34997332178199",
+          "37555474457495"
+        ]
+      ],
+      "seconds": [
+        0.1620398329978343,
+        0.03248245798749849
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-01",
+      "kind": "exact",
+      "query": "40089426663959",
+      "expected_ids": [
+        "40089426663959"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "40089426663959"
+      ],
+      "repeat_result_ids": [
+        [
+          "40089426663959"
+        ],
+        [
+          "40089426663959"
+        ]
+      ],
+      "seconds": [
+        0.002252125006634742,
+        0.001739250001264736
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-02-title",
+      "kind": "forum",
+      "query": "基于LLM+知识自进化的因子挖掘系统工作流",
+      "expected_ids": [
+        "37111825332759"
+      ],
+      "category": "title_target",
+      "source_title": "基于LLM+知识自进化的因子挖掘系统工作流",
+      "expect_empty": false,
+      "result_ids": [
+        "37111825332759",
+        "41653035827223",
+        "21146151322519",
+        "41992899715607",
+        "41137009390231"
+      ],
+      "repeat_result_ids": [
+        [
+          "37111825332759",
+          "41653035827223",
+          "21146151322519",
+          "41992899715607",
+          "41137009390231"
+        ],
+        [
+          "37111825332759",
+          "41653035827223",
+          "21146151322519",
+          "41992899715607",
+          "41137009390231"
+        ]
+      ],
+      "seconds": [
+        0.12425745799555443,
+        0.0482682500150986
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-02-phrase",
+      "kind": "forum",
+      "query": "知识自进化",
+      "expected_ids": [
+        "37111825332759"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "基于LLM+知识自进化的因子挖掘系统工作流",
+      "expect_empty": false,
+      "result_ids": [
+        "37111825332759",
+        "37374718949143",
+        "42019332809111",
+        "43320471694999",
+        "32120436409751"
+      ],
+      "repeat_result_ids": [
+        [
+          "37111825332759",
+          "37374718949143",
+          "42019332809111",
+          "43320471694999",
+          "32120436409751"
+        ],
+        [
+          "37111825332759",
+          "37374718949143",
+          "42019332809111",
+          "43320471694999",
+          "32120436409751"
+        ]
+      ],
+      "seconds": [
+        0.1391927079821471,
+        0.02886895797564648
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-02",
+      "kind": "exact",
+      "query": "37111825332759",
+      "expected_ids": [
+        "37111825332759"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "37111825332759"
+      ],
+      "repeat_result_ids": [
+        [
+          "37111825332759"
+        ],
+        [
+          "37111825332759"
+        ]
+      ],
+      "seconds": [
+        0.0020551249908749014,
+        0.002108292013872415
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-03-title",
+      "kind": "forum",
+      "query": "浅谈我的一二三阶开发流程----记7.23日新人答疑课",
+      "expected_ids": [
+        "42184733027991"
+      ],
+      "category": "title_target",
+      "source_title": "浅谈我的一二三阶开发流程----记7.23日新人答疑课",
+      "expect_empty": false,
+      "result_ids": [
+        "42184733027991",
+        "33114374191127",
+        "43527457608087",
+        "31713692012183",
+        "39922788056343"
+      ],
+      "repeat_result_ids": [
+        [
+          "42184733027991",
+          "33114374191127",
+          "43527457608087",
+          "31713692012183",
+          "39922788056343"
+        ],
+        [
+          "42184733027991",
+          "33114374191127",
+          "43527457608087",
+          "31713692012183",
+          "39922788056343"
+        ]
+      ],
+      "seconds": [
+        0.13038587500341237,
+        0.04699933298979886
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-03-phrase",
+      "kind": "forum",
+      "query": "开发流程",
+      "expected_ids": [
+        "42184733027991"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "浅谈我的一二三阶开发流程----记7.23日新人答疑课",
+      "expect_empty": false,
+      "result_ids": [
+        "43467733543319",
+        "42184733027991",
+        "41208855658519",
+        "40732429672343",
+        "43672797640727"
+      ],
+      "repeat_result_ids": [
+        [
+          "43467733543319",
+          "42184733027991",
+          "41208855658519",
+          "40732429672343",
+          "43672797640727"
+        ],
+        [
+          "43467733543319",
+          "42184733027991",
+          "41208855658519",
+          "40732429672343",
+          "43672797640727"
+        ]
+      ],
+      "seconds": [
+        0.18321074999403208,
+        0.028022542013786733
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-03",
+      "kind": "exact",
+      "query": "42184733027991",
+      "expected_ids": [
+        "42184733027991"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "42184733027991"
+      ],
+      "repeat_result_ids": [
+        [
+          "42184733027991"
+        ],
+        [
+          "42184733027991"
+        ]
+      ],
+      "seconds": [
+        0.0019287499890197068,
+        0.001669290999416262
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-04-title",
+      "kind": "forum",
+      "query": "【避坑】回填不是免费的，先区分“缺失信息”和“没有发生事件”",
+      "expected_ids": [
+        "43614846129687"
+      ],
+      "category": "title_target",
+      "source_title": "【避坑】回填不是免费的，先区分“缺失信息”和“没有发生事件”",
+      "expect_empty": false,
+      "result_ids": [
+        "43614846129687",
+        "41995684431767",
+        "43209525033495",
+        "44337401102743",
+        "32989653853975"
+      ],
+      "repeat_result_ids": [
+        [
+          "43614846129687",
+          "41995684431767",
+          "43209525033495",
+          "44337401102743",
+          "32989653853975"
+        ],
+        [
+          "43614846129687",
+          "41995684431767",
+          "43209525033495",
+          "44337401102743",
+          "32989653853975"
+        ]
+      ],
+      "seconds": [
+        0.12273654201999307,
+        0.0442116670019459
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-04-phrase",
+      "kind": "forum",
+      "query": "回填不是免费的",
+      "expected_ids": [
+        "43614846129687"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "【避坑】回填不是免费的，先区分“缺失信息”和“没有发生事件”",
+      "expect_empty": false,
+      "result_ids": [
+        "43614846129687",
+        "43696767427095",
+        "41995684431767",
+        "43640747372695",
+        "34997332178199"
+      ],
+      "repeat_result_ids": [
+        [
+          "43614846129687",
+          "43696767427095",
+          "41995684431767",
+          "43640747372695",
+          "34997332178199"
+        ],
+        [
+          "43614846129687",
+          "43696767427095",
+          "41995684431767",
+          "43640747372695",
+          "34997332178199"
+        ]
+      ],
+      "seconds": [
+        0.13347054200130515,
+        0.021799500013003126
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-04",
+      "kind": "exact",
+      "query": "43614846129687",
+      "expected_ids": [
+        "43614846129687"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "43614846129687"
+      ],
+      "repeat_result_ids": [
+        [
+          "43614846129687"
+        ],
+        [
+          "43614846129687"
+        ]
+      ],
+      "seconds": [
+        0.0019755839894060045,
+        0.001764167012879625
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-05-title",
+      "kind": "forum",
+      "query": "winsorize(x, std=4) 操作符详解",
+      "expected_ids": [
+        "33038954162583"
+      ],
+      "category": "title_target",
+      "source_title": "winsorize(x, std=4) 操作符详解",
+      "expect_empty": false,
+      "result_ids": [
+        "33038954162583",
+        "33129446675223",
+        "39441605621911",
+        "36617664667159",
+        "41550783184663"
+      ],
+      "repeat_result_ids": [
+        [
+          "33038954162583",
+          "33129446675223",
+          "39441605621911",
+          "36617664667159",
+          "41550783184663"
+        ],
+        [
+          "33038954162583",
+          "33129446675223",
+          "39441605621911",
+          "36617664667159",
+          "41550783184663"
+        ]
+      ],
+      "seconds": [
+        0.180462082993472,
+        0.021904416993493214
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-05-phrase",
+      "kind": "forum",
+      "query": "winsorize std",
+      "expected_ids": [
+        "33038954162583"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "winsorize(x, std=4) 操作符详解",
+      "expect_empty": false,
+      "result_ids": [
+        "33038954162583",
+        "33129446675223",
+        "41550783184663",
+        "41553665016983",
+        "36617664667159"
+      ],
+      "repeat_result_ids": [
+        [
+          "33038954162583",
+          "33129446675223",
+          "41550783184663",
+          "41553665016983",
+          "36617664667159"
+        ],
+        [
+          "33038954162583",
+          "33129446675223",
+          "41550783184663",
+          "41553665016983",
+          "36617664667159"
+        ]
+      ],
+      "seconds": [
+        0.07860945901484229,
+        0.03654941599234007
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-05",
+      "kind": "exact",
+      "query": "33038954162583",
+      "expected_ids": [
+        "33038954162583"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "33038954162583"
+      ],
+      "repeat_result_ids": [
+        [
+          "33038954162583"
+        ],
+        [
+          "33038954162583"
+        ]
+      ],
+      "seconds": [
+        0.0020361669885460287,
+        0.0018524579936638474
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-06-title",
+      "kind": "forum",
+      "query": "vector_neut(x, y) 操作符详解",
+      "expected_ids": [
+        "33062731607191"
+      ],
+      "category": "title_target",
+      "source_title": "vector_neut(x, y) 操作符详解",
+      "expect_empty": false,
+      "result_ids": [
+        "33062731607191",
+        "37287105140375",
+        "35255552108951",
+        "35292604112663",
+        "42135420032919"
+      ],
+      "repeat_result_ids": [
+        [
+          "33062731607191",
+          "37287105140375",
+          "35255552108951",
+          "35292604112663",
+          "42135420032919"
+        ],
+        [
+          "33062731607191",
+          "37287105140375",
+          "35255552108951",
+          "35292604112663",
+          "42135420032919"
+        ]
+      ],
+      "seconds": [
+        0.15901370899518952,
+        0.021754334011347964
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-06-phrase",
+      "kind": "forum",
+      "query": "vector_neut",
+      "expected_ids": [
+        "33062731607191"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "vector_neut(x, y) 操作符详解",
+      "expect_empty": false,
+      "result_ids": [
+        "32935370478103",
+        "42135420032919",
+        "35292604112663",
+        "35173305522327",
+        "33062731607191"
+      ],
+      "repeat_result_ids": [
+        [
+          "32935370478103",
+          "42135420032919",
+          "35292604112663",
+          "35173305522327",
+          "33062731607191"
+        ],
+        [
+          "32935370478103",
+          "42135420032919",
+          "35292604112663",
+          "35173305522327",
+          "33062731607191"
+        ]
+      ],
+      "seconds": [
+        0.07758845799253322,
+        0.031040959001984447
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-06",
+      "kind": "exact",
+      "query": "33062731607191",
+      "expected_ids": [
+        "33062731607191"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "33062731607191"
+      ],
+      "repeat_result_ids": [
+        [
+          "33062731607191"
+        ],
+        [
+          "33062731607191"
+        ]
+      ],
+      "seconds": [
+        0.0019596250203903764,
+        0.0019465420045889914
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-07-title",
+      "kind": "forum",
+      "query": "减少无效回测",
+      "expected_ids": [
+        "36248601073175"
+      ],
+      "category": "title_target",
+      "source_title": "减少无效回测",
+      "expect_empty": false,
+      "result_ids": [
+        "39659860284695",
+        "36248601073175",
+        "36514324978583",
+        "42423993843735",
+        "36251528053527"
+      ],
+      "repeat_result_ids": [
+        [
+          "39659860284695",
+          "36248601073175",
+          "36514324978583",
+          "42423993843735",
+          "36251528053527"
+        ],
+        [
+          "39659860284695",
+          "36248601073175",
+          "36514324978583",
+          "42423993843735",
+          "36251528053527"
+        ]
+      ],
+      "seconds": [
+        0.1708353339927271,
+        0.02831424999749288
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-07-phrase",
+      "kind": "forum",
+      "query": "无效回测",
+      "expected_ids": [
+        "36248601073175"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "减少无效回测",
+      "expect_empty": false,
+      "result_ids": [
+        "39659860284695",
+        "36248601073175",
+        "36514324978583",
+        "42423993843735",
+        "36964165604119"
+      ],
+      "repeat_result_ids": [
+        [
+          "39659860284695",
+          "36248601073175",
+          "36514324978583",
+          "42423993843735",
+          "36964165604119"
+        ],
+        [
+          "39659860284695",
+          "36248601073175",
+          "36514324978583",
+          "42423993843735",
+          "36964165604119"
+        ]
+      ],
+      "seconds": [
+        0.1636338749958668,
+        0.034427291015163064
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-07",
+      "kind": "exact",
+      "query": "36248601073175",
+      "expected_ids": [
+        "36248601073175"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "36248601073175"
+      ],
+      "repeat_result_ids": [
+        [
+          "36248601073175"
+        ],
+        [
+          "36248601073175"
+        ]
+      ],
+      "seconds": [
+        0.0021566250070463866,
+        0.001912209001602605
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-08-title",
+      "kind": "forum",
+      "query": "🌊 平滑类算子:均值的几种面孔",
+      "expected_ids": [
+        "43608868935703"
+      ],
+      "category": "title_target",
+      "source_title": "🌊 平滑类算子:均值的几种面孔",
+      "expect_empty": false,
+      "result_ids": [
+        "43608868935703",
+        "41483444815895",
+        "43843996221335",
+        "40788850736023",
+        "43835589696535"
+      ],
+      "repeat_result_ids": [
+        [
+          "43608868935703",
+          "41483444815895",
+          "43843996221335",
+          "40788850736023",
+          "43835589696535"
+        ],
+        [
+          "43608868935703",
+          "41483444815895",
+          "43843996221335",
+          "40788850736023",
+          "43835589696535"
+        ]
+      ],
+      "seconds": [
+        0.21480487499502487,
+        0.024107665987685323
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-08-phrase",
+      "kind": "forum",
+      "query": "平滑类算子",
+      "expected_ids": [
+        "43608868935703"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "🌊 平滑类算子:均值的几种面孔",
+      "expect_empty": false,
+      "result_ids": [
+        "43608868935703",
+        "41314304003351",
+        "40788850736023",
+        "43843996221335",
+        "43614885175703"
+      ],
+      "repeat_result_ids": [
+        [
+          "43608868935703",
+          "41314304003351",
+          "40788850736023",
+          "43843996221335",
+          "43614885175703"
+        ],
+        [
+          "43608868935703",
+          "41314304003351",
+          "40788850736023",
+          "43843996221335",
+          "43614885175703"
+        ]
+      ],
+      "seconds": [
+        0.11307712498819456,
+        0.021270666999043897
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-08",
+      "kind": "exact",
+      "query": "43608868935703",
+      "expected_ids": [
+        "43608868935703"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "43608868935703"
+      ],
+      "repeat_result_ids": [
+        [
+          "43608868935703"
+        ],
+        [
+          "43608868935703"
+        ]
+      ],
+      "seconds": [
+        0.00221574999159202,
+        0.0017404159880243242
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-09-title",
+      "kind": "forum",
+      "query": "用 Claude Skills 做因子自动挖掘：回测、记录与知识查询模块化",
+      "expected_ids": [
+        "37560258463767"
+      ],
+      "category": "title_target",
+      "source_title": "用 Claude Skills 做因子自动挖掘：回测、记录与知识查询模块化",
+      "expect_empty": false,
+      "result_ids": [
+        "37560258463767",
+        "37745706080407",
+        "37256471094551",
+        "37701654477847",
+        "44436235728279"
+      ],
+      "repeat_result_ids": [
+        [
+          "37560258463767",
+          "37745706080407",
+          "37256471094551",
+          "37701654477847",
+          "44436235728279"
+        ],
+        [
+          "37560258463767",
+          "37745706080407",
+          "37256471094551",
+          "37701654477847",
+          "44436235728279"
+        ]
+      ],
+      "seconds": [
+        0.1066907079948578,
+        0.041942749987356365
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-09-phrase",
+      "kind": "forum",
+      "query": "因子自动挖掘",
+      "expected_ids": [
+        "37560258463767"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "用 Claude Skills 做因子自动挖掘：回测、记录与知识查询模块化",
+      "expect_empty": false,
+      "result_ids": [
+        "37560258463767",
+        "21109320413335",
+        "43635186227095",
+        "37383263937047",
+        "42363379584279"
+      ],
+      "repeat_result_ids": [
+        [
+          "37560258463767",
+          "21109320413335",
+          "43635186227095",
+          "37383263937047",
+          "42363379584279"
+        ],
+        [
+          "37560258463767",
+          "21109320413335",
+          "43635186227095",
+          "37383263937047",
+          "42363379584279"
+        ]
+      ],
+      "seconds": [
+        0.13819179200800136,
+        0.024477625003783032
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-09",
+      "kind": "exact",
+      "query": "37560258463767",
+      "expected_ids": [
+        "37560258463767"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "37560258463767"
+      ],
+      "repeat_result_ids": [
+        [
+          "37560258463767"
+        ],
+        [
+          "37560258463767"
+        ]
+      ],
+      "seconds": [
+        0.0021491249790415168,
+        0.0025529999984428287
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-10-title",
+      "kind": "forum",
+      "query": "数据字段检索器 - 基于WQ自带搜索引擎实现高效复合因子构建",
+      "expected_ids": [
+        "34402915350551"
+      ],
+      "category": "title_target",
+      "source_title": "数据字段检索器 - 基于WQ自带搜索引擎实现高效复合因子构建",
+      "expect_empty": false,
+      "result_ids": [
+        "34402915350551",
+        "33841565845399",
+        "20101484394903",
+        "37311396033175",
+        "33062628700055"
+      ],
+      "repeat_result_ids": [
+        [
+          "34402915350551",
+          "33841565845399",
+          "20101484394903",
+          "37311396033175",
+          "33062628700055"
+        ],
+        [
+          "34402915350551",
+          "33841565845399",
+          "20101484394903",
+          "37311396033175",
+          "33062628700055"
+        ]
+      ],
+      "seconds": [
+        0.1049195000086911,
+        0.048716749995946884
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-10-phrase",
+      "kind": "forum",
+      "query": "数据字段检索器",
+      "expected_ids": [
+        "34402915350551"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "数据字段检索器 - 基于WQ自带搜索引擎实现高效复合因子构建",
+      "expect_empty": false,
+      "result_ids": [
+        "34402915350551",
+        "43672864698391",
+        "44440138616983",
+        "41734765320983",
+        "43212475386007"
+      ],
+      "repeat_result_ids": [
+        [
+          "34402915350551",
+          "43672864698391",
+          "44440138616983",
+          "41734765320983",
+          "43212475386007"
+        ],
+        [
+          "34402915350551",
+          "43672864698391",
+          "44440138616983",
+          "41734765320983",
+          "43212475386007"
+        ]
+      ],
+      "seconds": [
+        0.1204586669919081,
+        0.023454500013031065
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-10",
+      "kind": "exact",
+      "query": "34402915350551",
+      "expected_ids": [
+        "34402915350551"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "34402915350551"
+      ],
+      "repeat_result_ids": [
+        [
+          "34402915350551"
+        ],
+        [
+          "34402915350551"
+        ]
+      ],
+      "seconds": [
+        0.002143542020348832,
+        0.0018099579901900142
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-11-title",
+      "kind": "forum",
+      "query": "[BRAIN TIPS]ts_backfill operator: An assumption, not a fix",
+      "expected_ids": [
+        "39808300193431"
+      ],
+      "category": "title_target",
+      "source_title": "[BRAIN TIPS]ts_backfill operator: An assumption, not a fix",
+      "expect_empty": false,
+      "result_ids": [
+        "39808300193431",
+        "40576075554327",
+        "43934121499031",
+        "10263359151383",
+        "19344464221335"
+      ],
+      "repeat_result_ids": [
+        [
+          "39808300193431",
+          "40576075554327",
+          "43934121499031",
+          "10263359151383",
+          "19344464221335"
+        ],
+        [
+          "39808300193431",
+          "40576075554327",
+          "43934121499031",
+          "10263359151383",
+          "19344464221335"
+        ]
+      ],
+      "seconds": [
+        0.14324283300084062,
+        0.03786237500025891
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-11-phrase",
+      "kind": "forum",
+      "query": "ts_backfill assumption",
+      "expected_ids": [
+        "39808300193431"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "[BRAIN TIPS]ts_backfill operator: An assumption, not a fix",
+      "expect_empty": false,
+      "result_ids": [
+        "39808300193431",
+        "40576075554327",
+        "37918246743831",
+        "32743722405143",
+        "33129446675223"
+      ],
+      "repeat_result_ids": [
+        [
+          "39808300193431",
+          "40576075554327",
+          "37918246743831",
+          "32743722405143",
+          "33129446675223"
+        ],
+        [
+          "39808300193431",
+          "40576075554327",
+          "37918246743831",
+          "32743722405143",
+          "33129446675223"
+        ]
+      ],
+      "seconds": [
+        0.09076858300250024,
+        0.03417345799971372
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-11",
+      "kind": "exact",
+      "query": "39808300193431",
+      "expected_ids": [
+        "39808300193431"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "39808300193431"
+      ],
+      "repeat_result_ids": [
+        [
+          "39808300193431"
+        ],
+        [
+          "39808300193431"
+        ]
+      ],
+      "seconds": [
+        0.0019436250149738044,
+        0.001747457979945466
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-12-title",
+      "kind": "forum",
+      "query": "一阶、二阶，你真的用熟练了吗？——聊聊字段挖掘、ts_backfill 和 winsorize",
+      "expected_ids": [
+        "43527457608087"
+      ],
+      "category": "title_target",
+      "source_title": "一阶、二阶，你真的用熟练了吗？——聊聊字段挖掘、ts_backfill 和 winsorize",
+      "expect_empty": false,
+      "result_ids": [
+        "43527457608087",
+        "28753093217687",
+        "39922788056343",
+        "35377811169175",
+        "42739546158615"
+      ],
+      "repeat_result_ids": [
+        [
+          "43527457608087",
+          "28753093217687",
+          "39922788056343",
+          "35377811169175",
+          "42739546158615"
+        ],
+        [
+          "43527457608087",
+          "28753093217687",
+          "39922788056343",
+          "35377811169175",
+          "42739546158615"
+        ]
+      ],
+      "seconds": [
+        0.09190841697272845,
+        0.04675791601766832
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-12-phrase",
+      "kind": "forum",
+      "query": "一阶 二阶",
+      "expected_ids": [
+        "43527457608087"
+      ],
+      "category": "substring_or_mixed",
+      "source_title": "一阶、二阶，你真的用熟练了吗？——聊聊字段挖掘、ts_backfill 和 winsorize",
+      "expect_empty": false,
+      "result_ids": [
+        "28753093217687",
+        "43527457608087",
+        "35772030835095",
+        "33071060381591",
+        "32603028529175"
+      ],
+      "repeat_result_ids": [
+        [
+          "28753093217687",
+          "43527457608087",
+          "35772030835095",
+          "33071060381591",
+          "32603028529175"
+        ],
+        [
+          "28753093217687",
+          "43527457608087",
+          "35772030835095",
+          "33071060381591",
+          "32603028529175"
+        ]
+      ],
+      "seconds": [
+        0.07712295799865387,
+        0.037048041995149106
+      ],
+      "error": null
+    },
+    {
+      "id": "exact-12",
+      "kind": "exact",
+      "query": "43527457608087",
+      "expected_ids": [
+        "43527457608087"
+      ],
+      "category": "topic_id",
+      "expect_empty": false,
+      "result_ids": [
+        "43527457608087"
+      ],
+      "repeat_result_ids": [
+        [
+          "43527457608087"
+        ],
+        [
+          "43527457608087"
+        ]
+      ],
+      "seconds": [
+        0.002029833005508408,
+        0.0017763339856173843
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-operators-title",
+      "kind": "docs",
+      "query": "Operators",
+      "expected_ids": [
+        "operators"
+      ],
+      "category": "official_doc_target",
+      "expect_empty": false,
+      "result_ids": [
+        "brain-genius",
+        "operators",
+        "superalpha-operators",
+        "selection-expression",
+        "combo-expression"
+      ],
+      "repeat_result_ids": [
+        [
+          "brain-genius",
+          "operators",
+          "superalpha-operators",
+          "selection-expression",
+          "combo-expression"
+        ],
+        [
+          "brain-genius",
+          "operators",
+          "superalpha-operators",
+          "selection-expression",
+          "combo-expression"
+        ]
+      ],
+      "seconds": [
+        0.21284441600437276,
+        0.0296878750086762
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-operators-slug",
+      "kind": "docs",
+      "query": "operators",
+      "expected_ids": [
+        "operators"
+      ],
+      "category": "official_doc_target",
+      "expect_empty": false,
+      "result_ids": [
+        "brain-genius",
+        "operators",
+        "superalpha-operators",
+        "selection-expression",
+        "combo-expression"
+      ],
+      "repeat_result_ids": [
+        [
+          "brain-genius",
+          "operators",
+          "superalpha-operators",
+          "selection-expression",
+          "combo-expression"
+        ],
+        [
+          "brain-genius",
+          "operators",
+          "superalpha-operators",
+          "selection-expression",
+          "combo-expression"
+        ]
+      ],
+      "seconds": [
+        0.029845749988453463,
+        0.029407833004370332
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-neutralization-title",
+      "kind": "docs",
+      "query": "Neutralization",
+      "expected_ids": [
+        "neutralization"
+      ],
+      "category": "official_doc_target",
+      "expect_empty": false,
+      "result_ids": [
+        "risk-neutralization-default-setting",
+        "double-neutralization",
+        "neutralization",
+        "crowding-risk-neutralized-alphas",
+        "risk-neutralized-alphas"
+      ],
+      "repeat_result_ids": [
+        [
+          "risk-neutralization-default-setting",
+          "double-neutralization",
+          "neutralization",
+          "crowding-risk-neutralized-alphas",
+          "risk-neutralized-alphas"
+        ],
+        [
+          "risk-neutralization-default-setting",
+          "double-neutralization",
+          "neutralization",
+          "crowding-risk-neutralized-alphas",
+          "risk-neutralized-alphas"
+        ]
+      ],
+      "seconds": [
+        0.14007754100020975,
+        0.029434166994178668
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-neutralization-slug",
+      "kind": "docs",
+      "query": "neutralization",
+      "expected_ids": [
+        "neutralization"
+      ],
+      "category": "official_doc_target",
+      "expect_empty": false,
+      "result_ids": [
+        "risk-neutralization-default-setting",
+        "double-neutralization",
+        "neutralization",
+        "crowding-risk-neutralized-alphas",
+        "risk-neutralized-alphas"
+      ],
+      "repeat_result_ids": [
+        [
+          "risk-neutralization-default-setting",
+          "double-neutralization",
+          "neutralization",
+          "crowding-risk-neutralized-alphas",
+          "risk-neutralized-alphas"
+        ],
+        [
+          "risk-neutralization-default-setting",
+          "double-neutralization",
+          "neutralization",
+          "crowding-risk-neutralized-alphas",
+          "risk-neutralized-alphas"
+        ]
+      ],
+      "seconds": [
+        0.029294707986991853,
+        0.04732070799218491
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-double-neutralization-title",
+      "kind": "docs",
+      "query": "Double Neutralization",
+      "expected_ids": [
+        "double-neutralization"
+      ],
+      "category": "official_doc_target",
+      "expect_empty": false,
+      "result_ids": [
+        "double-neutralization",
+        "risk-neutralization-default-setting",
+        "global-alphas-gold",
+        "crowding-risk-neutralized-alphas",
+        "risk-neutralized-alphas"
+      ],
+      "repeat_result_ids": [
+        [
+          "double-neutralization",
+          "risk-neutralization-default-setting",
+          "global-alphas-gold",
+          "crowding-risk-neutralized-alphas",
+          "risk-neutralized-alphas"
+        ],
+        [
+          "double-neutralization",
+          "risk-neutralization-default-setting",
+          "global-alphas-gold",
+          "crowding-risk-neutralized-alphas",
+          "risk-neutralized-alphas"
+        ]
+      ],
+      "seconds": [
+        0.038316499994834885,
+        0.032184000010602176
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-double-neutralization-slug",
+      "kind": "docs",
+      "query": "double neutralization",
+      "expected_ids": [
+        "double-neutralization"
+      ],
+      "category": "official_doc_target",
+      "expect_empty": false,
+      "result_ids": [
+        "double-neutralization",
+        "risk-neutralization-default-setting",
+        "global-alphas-gold",
+        "crowding-risk-neutralized-alphas",
+        "risk-neutralized-alphas"
+      ],
+      "repeat_result_ids": [
+        [
+          "double-neutralization",
+          "risk-neutralization-default-setting",
+          "global-alphas-gold",
+          "crowding-risk-neutralized-alphas",
+          "risk-neutralized-alphas"
+        ],
+        [
+          "double-neutralization",
+          "risk-neutralization-default-setting",
+          "global-alphas-gold",
+          "crowding-risk-neutralized-alphas",
+          "risk-neutralized-alphas"
+        ]
+      ],
+      "seconds": [
+        0.03185295799630694,
+        0.03176920901751146
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-risk-neutralization-default-setting-title",
+      "kind": "docs",
+      "query": "Risk Neutralization Default setting",
+      "expected_ids": [
+        "risk-neutralization-default-setting"
+      ],
+      "category": "official_doc_target",
+      "expect_empty": false,
+      "result_ids": [
+        "risk-neutralization-default-setting",
+        "risk-neutralized-alphas",
+        "crowding-risk-neutralized-alphas",
+        "statistical-risk-neutralized-alphas",
+        "ram-risk-neutralized-alphas"
+      ],
+      "repeat_result_ids": [
+        [
+          "risk-neutralization-default-setting",
+          "risk-neutralized-alphas",
+          "crowding-risk-neutralized-alphas",
+          "statistical-risk-neutralized-alphas",
+          "ram-risk-neutralized-alphas"
+        ],
+        [
+          "risk-neutralization-default-setting",
+          "risk-neutralized-alphas",
+          "crowding-risk-neutralized-alphas",
+          "statistical-risk-neutralized-alphas",
+          "ram-risk-neutralized-alphas"
+        ]
+      ],
+      "seconds": [
+        0.1546337079780642,
+        0.05716374999610707
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-risk-neutralization-default-setting-slug",
+      "kind": "docs",
+      "query": "risk neutralization default setting",
+      "expected_ids": [
+        "risk-neutralization-default-setting"
+      ],
+      "category": "official_doc_target",
+      "expect_empty": false,
+      "result_ids": [
+        "risk-neutralization-default-setting",
+        "risk-neutralized-alphas",
+        "crowding-risk-neutralized-alphas",
+        "statistical-risk-neutralized-alphas",
+        "ram-risk-neutralized-alphas"
+      ],
+      "repeat_result_ids": [
+        [
+          "risk-neutralization-default-setting",
+          "risk-neutralized-alphas",
+          "crowding-risk-neutralized-alphas",
+          "statistical-risk-neutralized-alphas",
+          "ram-risk-neutralized-alphas"
+        ],
+        [
+          "risk-neutralization-default-setting",
+          "risk-neutralized-alphas",
+          "crowding-risk-neutralized-alphas",
+          "statistical-risk-neutralized-alphas",
+          "ram-risk-neutralized-alphas"
+        ]
+      ],
+      "seconds": [
+        0.053445625002495944,
+        0.05426791700301692
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-negative-00",
+      "kind": "forum",
+      "query": "",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.0017726669902913272,
+        0.001993166981264949
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-negative-01",
+      "kind": "forum",
+      "query": "   ",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.001603457989403978,
+        0.0015162920171860605
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-negative-02",
+      "kind": "forum",
+      "query": "zzzxqv_no_such_operator_20261027",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.002517666987841949,
+        0.0016401670000050217
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-negative-03",
+      "kind": "forum",
+      "query": "qzv_734819_not_a_datafield",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.0025802089949138463,
+        0.0015797079831827432
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-negative-04",
+      "kind": "forum",
+      "query": "xqv_unsupported_model_981247",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.002120500023011118,
+        0.00161945799482055
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-negative-05",
+      "kind": "forum",
+      "query": "quux_no_forum_evidence_512834",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.0020423750102054328,
+        0.0024802080006338656
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-negative-06",
+      "kind": "forum",
+      "query": "neverexistent_operators_449920",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.0025914580037351698,
+        0.0017641249869484454
+      ],
+      "error": null
+    },
+    {
+      "id": "forum-negative-07",
+      "kind": "forum",
+      "query": "xyzzy_no_results_912345",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.0024352920008823276,
+        0.0018934170075226575
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-negative-00",
+      "kind": "docs",
+      "query": "",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.00215162499807775,
+        0.0036572919925674796
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-negative-01",
+      "kind": "docs",
+      "query": "   ",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.003117959015071392,
+        0.0027206249942537397
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-negative-02",
+      "kind": "docs",
+      "query": "zzzxqv_no_such_operator_20261027",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.029013709019636735,
+        0.00682987502659671
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-negative-03",
+      "kind": "docs",
+      "query": "qzv_734819_not_a_datafield",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.002987290994497016,
+        0.002957999997306615
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-negative-04",
+      "kind": "docs",
+      "query": "xqv_unsupported_model_981247",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.0029347910021897405,
+        0.002363000006880611
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-negative-05",
+      "kind": "docs",
+      "query": "quux_no_forum_evidence_512834",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.0036166670033708215,
+        0.0023735839931759983
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-negative-06",
+      "kind": "docs",
+      "query": "neverexistent_operators_449920",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.001971791993128136,
+        0.0023082080006133765
+      ],
+      "error": null
+    },
+    {
+      "id": "docs-negative-07",
+      "kind": "docs",
+      "query": "xyzzy_no_results_912345",
+      "expect_empty": true,
+      "category": "empty_or_absent_identifier",
+      "expected_ids": [],
+      "result_ids": [],
+      "repeat_result_ids": [
+        [],
+        []
+      ],
+      "seconds": [
+        0.00249220899422653,
+        0.0018496669945307076
+      ],
+      "error": null
+    }
+  ]
+}

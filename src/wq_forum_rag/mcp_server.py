@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
 from pathlib import Path
@@ -55,6 +56,39 @@ def search_forum(query: str, db: str | None = None, top_k: int = 5) -> dict[str,
     except ForumDatabaseBusyError as exc:
         return _busy_payload(exc, query=query, results=[])
     return {"query": query, "db": str(db_path), "results": results}
+
+
+async def search_semantic_forum(
+    query: str, db: str | None = None, top_k: int = 5,
+    index_dir: str | None = None, model_dir: str | None = None,
+    min_score: float = 0.5, mode: str = "semantic",
+) -> dict[str, Any]:
+    """Search a separately built local model index, or fuse it with lexical hits.
+
+    Requires explicit offline model/index preparation. Raw cosine is not a
+    confidence probability; min_score needs dataset-specific calibration.
+    """
+    db_path = _resolve_db_path(db)
+    index_dir = index_dir or os.environ.get("FORUM_RAG_SEMANTIC_INDEX")
+    model_dir = model_dir or os.environ.get("FORUM_RAG_MODEL_DIR")
+    base = {"query": query, "db": str(db_path)}
+    if not index_dir or not model_dir:
+        return {**base, "status": "not_configured", "results": [],
+                "reason": "Build a local semantic index and supply index_dir/model_dir."}
+    from .semantic_retrieval import search_semantic_forum as retrieve
+
+    try:
+        result = await asyncio.to_thread(
+            retrieve, db_path, query, index_dir=index_dir, model_dir=model_dir,
+            top_k=top_k, min_score=min_score, mode=mode,
+        )
+    except sqlite3.OperationalError as exc:
+        try:
+            raise_if_database_locked(exc, db_path)
+        except ForumDatabaseBusyError as busy:
+            return _busy_payload(busy, **base, results=[])
+        raise
+    return {**base, **result}
 
 
 def get_post(topic_id: str, db: str | None = None) -> dict[str, Any]:
@@ -467,6 +501,7 @@ def build_mcp_server(default_db: str | Path | None = None) -> FastMCP:
         os.environ["FORUM_RAG_DB"] = str(default_db)
     server = FastMCP("forum-rag", json_response=True)
     server.tool()(search_forum)
+    server.tool()(search_semantic_forum)
     server.tool()(get_post)
     server.tool()(find_by_exact)
     server.tool()(related_posts)

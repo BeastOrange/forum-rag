@@ -1,0 +1,123 @@
+{
+  "label_status": "pending",
+  "source": "候选主题来自 tests/fixtures/search_eval.json；查询由工具制作者拟定，未经人工审核。",
+  "annotator": null,
+  "reviewed_at": null,
+  "instructions": "审核人员应查看每条查询的候选和多模式检索结果，合并候选池并逐条填写 topic_id: 等级（0 不相关，1 略相关，2 相关，3 高度相关），不得把未审核结果当作 0。对负例确认其确无相关结果；如果发现相关结果，改为正例并标注。所有条目完成后填写真实审核人、ISO 日期、来源，将 label_status 改为 human_reviewed；保存到可审查的 labels JSON 路径，再用 --labels 引用。检索未判定覆盖率应单独报告。",
+  "cases": [
+    {
+      "id": "rag",
+      "query": "如何构建检索增强生成系统",
+      "split": "dev",
+      "negative": false,
+      "judgments": {
+        "40089426663959": null
+      }
+    },
+    {
+      "id": "rag-en",
+      "query": "self improving retrieval augmented generation",
+      "split": "dev",
+      "negative": false,
+      "judgments": {
+        "40089426663959": null
+      }
+    },
+    {
+      "id": "factor",
+      "query": "机器学习因子挖掘流程",
+      "split": "dev",
+      "negative": false,
+      "judgments": {
+        "37111825332759": null
+      }
+    },
+    {
+      "id": "factor-en",
+      "query": "automated alpha factor discovery using language models",
+      "split": "dev",
+      "negative": false,
+      "judgments": {
+        "37111825332759": null
+      }
+    },
+    {
+      "id": "workflow",
+      "query": "新手如何开发策略",
+      "split": "dev",
+      "negative": false,
+      "judgments": {
+        "42184733027991": null
+      }
+    },
+    {
+      "id": "workflow-en",
+      "query": "beginner research development workflow",
+      "split": "dev",
+      "negative": false,
+      "judgments": {
+        "42184733027991": null
+      }
+    },
+    {
+      "id": "backfill",
+      "query": "历史数据回填和缺失值有什么区别",
+      "split": "dev",
+      "negative": false,
+      "judgments": {
+        "43614846129687": null
+      }
+    },
+    {
+      "id": "backfill-en",
+      "query": "distinguish missing data from an event that never occurred",
+      "split": "dev",
+      "negative": false,
+      "judgments": {
+        "43614846129687": null
+      }
+    },
+    {
+      "id": "robust",
+      "query": "如何验证策略稳健性",
+      "split": "test",
+      "negative": false,
+      "judgments": {}
+    },
+    {
+      "id": "robust-en",
+      "query": "how to test robustness of a trading strategy",
+      "split": "test",
+      "negative": false,
+      "judgments": {}
+    },
+    {
+      "id": "neutral",
+      "query": "行业中性化的方法",
+      "split": "test",
+      "negative": false,
+      "judgments": {}
+    },
+    {
+      "id": "neutral-en",
+      "query": "industry neutralization methods for alpha signals",
+      "split": "test",
+      "negative": false,
+      "judgments": {}
+    },
+    {
+      "id": "negative",
+      "query": "zzqv invented nonexistent phrase 928371",
+      "split": "test",
+      "negative": true,
+      "judgments": {}
+    },
+    {
+      "id": "negative-en",
+      "query": "nonexistent topic identifier qzxv 734981",
+      "split": "test",
+      "negative": true,
+      "judgments": {}
+    }
+  ]
+}

@@ -252,6 +252,23 @@ def show_doc_command(
     console.print_json(data=document)
 
 
+@app.command("search-semantic")
+def search_semantic_command(
+    query: str = typer.Argument(...),
+    db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+    index_dir: Path = typer.Option(..., "--index-dir", exists=True, file_okay=False),
+    model_dir: Path = typer.Option(..., "--model-dir", exists=True, file_okay=False),
+    top_k: int = typer.Option(5, "--top-k", min=1),
+    min_score: float = typer.Option(0.5, "--min-score", min=-1.0, max=1.0),
+    mode: str = typer.Option("semantic", "--mode", help="semantic or hybrid"),
+) -> None:
+    from wq_forum_rag.semantic_retrieval import search_semantic_forum
+
+    console.print_json(data=search_semantic_forum(
+        db_path, query, index_dir=index_dir, model_dir=model_dir,
+        top_k=top_k, min_score=min_score, mode=mode))
+
+
 def main() -> None:
     app()
 

@@ -1,0 +1,47 @@
+{
+  "source_sha256": {
+    "src/wq_forum_rag/__init__.py": "cee5d70429d0afc4a686bc950a5d449aff01773a533f8dbe6b9df4802a0bf5de",
+    "src/wq_forum_rag/cli.py": "bffe16a66eab9258fe79d6b347e20e0570ff8e8e81db07b70031d9c3ec654e6a",
+    "src/wq_forum_rag/documents.py": "86414bef39196f8f13f333accfa06cbdbccab500e9675a40ff22b2936f09042b",
+    "src/wq_forum_rag/embeddings.py": "908f5bf4148950daba1132d3e4465b2f2a124ba91aa27bffc377467476de445c",
+    "src/wq_forum_rag/evolution.py": "7ebe803a86f7877e2447672e9f1158f94cf1371dcc0e99ad2494832b6081be3f",
+    "src/wq_forum_rag/evolution_cli.py": "52218edb21954824b47692b2369103cbe7d8321e3a4999dce8e3ba2a22499b91",
+    "src/wq_forum_rag/indexer.py": "0e50a4d4b19381e7c3d1ca07054a2ea88936ed675d4132047d90d80fc842dcfe",
+    "src/wq_forum_rag/knowledge.py": "d2145a89522b0ec91f7ed617fa1b74ac5eb75cc9cb195663ff8e1977313f5b59",
+    "src/wq_forum_rag/knowledge_quality.py": "7c640f6d1ce752b9ec675b46b034da8a13617ac94d591dcc91cd91a09e9fd06c",
+    "src/wq_forum_rag/manifest.py": "036b55b9db1974b058bbb7a7bd41ff42fcaa17601c298925e94a808837a08eca",
+    "src/wq_forum_rag/mcp_server.py": "5768113c9cdb9a27c8c89076b02944ea11de40085176ab3c3385f14bd9b8ff35",
+    "src/wq_forum_rag/models.py": "d78546e1478ee8d45d9c4c5c14636b9e8fc937b80193817f35ce042e4fc4281d",
+    "src/wq_forum_rag/parser.py": "7c94d03d26bd03747fb47203e1843ff0ddb0385795e6c87137f9f39ce40167c9",
+    "src/wq_forum_rag/search.py": "dfaa3be25e15e64b3d7a35ae72ac0e0be4b5c411a18b5afe508add3155405325",
+    "src/wq_forum_rag/search_cache.py": "db5341c7896bb96640d17bdb310237d17be31cbce1601577411ce4d7c893950f",
+    "src/wq_forum_rag/search_index.py": "096980a64bd45219c64bfb9e63f0b599c7087ce2bdbf998cc25c06a344a89e17",
+    "src/wq_forum_rag/search_records.py": "7e7b9ceb648eb101e0f3c51df4333735eee87cef85c5ac888b4348d04a11c233",
+    "src/wq_forum_rag/semantic_index.py": "00d0a5a64e9a35d3b1f59a99c80e1feaf50ac8b882aef83079819c4cf9a2db39",
+    "src/wq_forum_rag/semantic_retrieval.py": "cd807480c173d1d991c8424a6013fd4132d160173f068dac643a0285dc197365",
+    "src/wq_forum_rag/source_cli.py": "2a60a2762e5f9b1d6f420bed3ffe1b293201d6781ad7cf185f2844a0e88474ad",
+    "src/wq_forum_rag/storage.py": "0ecd4ee0295e3bf96f2ab16a1f15880ac3f85bab8b2b286511f8090632cdb108",
+    "src/wq_forum_rag/wiki.py": "6d790832f0785c6407a98ed6750c298c6213b26afa90a898311f5f213121e715"
+  },
+  "full_suite": "105 passed in 74.63s",
+  "model_spec": {
+    "model_name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "repository": "qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q",
+    "revision": "faf4aa4225822f3bc6376869cb1164e8e3feedd0",
+    "dimension": 384,
+    "query_prefix": "",
+    "passage_prefix": "",
+    "normalization": "l2",
+    "pooling": "mean",
+    "license": "apache-2.0",
+    "files": {
+      "model_optimized.onnx": "634d0f66c29dc934c8fa72b8a4fe91dd4d420a22f1d82a241058d4316e659a99",
+      "tokenizer_config.json": "0666eebf692422757e1dddf3c9fb1ded73ba3dc726c5828671fc89e45bf3609f",
+      "special_tokens_map.json": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835",
+      "config.json": "c8ec081fdad2df991bf5abbf18418fec7a5cdaa421f60ffb060a30040b8c376f",
+      "tokenizer.json": "fa685fc160bbdbab64058d4fc91b60e62d207e8dc60b9af5c002c5ab946ded00"
+    }
+  },
+  "generation": "generation-d3c72392b4934ac6ab4daada8d2aa9f4",
+  "human_labels": "pending"
+}

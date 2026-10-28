@@ -1,0 +1,34 @@
+[
+  {
+    "threads": 1,
+    "batch_size": 16,
+    "documents": 128,
+    "seconds": 1.8286831250006799,
+    "docs_per_second": 69.99572438223949,
+    "load_seconds": 1.042382457992062
+  },
+  {
+    "threads": 2,
+    "batch_size": 16,
+    "documents": 128,
+    "seconds": 2.430406083003618,
+    "docs_per_second": 52.666095964428784,
+    "load_seconds": 0.34049466700525954
+  },
+  {
+    "threads": 4,
+    "batch_size": 16,
+    "documents": 128,
+    "seconds": 2.078793583001243,
+    "docs_per_second": 61.574175063211875,
+    "load_seconds": 0.40763791601057164
+  },
+  {
+    "threads": 8,
+    "batch_size": 16,
+    "documents": 128,
+    "seconds": 2.1124118749867193,
+    "docs_per_second": 60.59424372474934,
+    "load_seconds": 0.3857974999991711
+  }
+]

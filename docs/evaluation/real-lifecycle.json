@@ -1,0 +1,14 @@
+{
+  "real_model": true,
+  "reserved_writer_read_succeeded": true,
+  "atomic_switch_requests": 64,
+  "workers": 8,
+  "consistent": true,
+  "exclusive_lock_status": "locked",
+  "exclusive_lock_seconds": 5.208499083004426,
+  "committed_write_rejected_stale": true,
+  "database": "disposable tiny copy",
+  "limitations": [
+    "Synthetic behavior evidence, not human relevance accuracy."
+  ]
+}

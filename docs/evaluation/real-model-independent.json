@@ -1,0 +1,42 @@
+[
+  {
+    "query": "filling missing values in data",
+    "expected": "missing",
+    "lexical_count": 0,
+    "semantic": [
+      [
+        "missing",
+        0.5391503572463989
+      ]
+    ],
+    "seconds": 0.9382574160117656
+  },
+  {
+    "query": "neutralizing industry effects",
+    "expected": "industry",
+    "lexical_count": 0,
+    "semantic": [
+      [
+        "industry",
+        0.6948500871658325
+      ]
+    ],
+    "seconds": 0.00724725000327453
+  },
+  {
+    "query": "traceable knowledge search with supporting evidence",
+    "expected": "retrieval",
+    "lexical_count": 0,
+    "semantic": [
+      [
+        "retrieval",
+        0.6921442151069641
+      ],
+      [
+        "missing",
+        0.35034623742103577
+      ]
+    ],
+    "seconds": 0.011032999987946823
+  }
+]

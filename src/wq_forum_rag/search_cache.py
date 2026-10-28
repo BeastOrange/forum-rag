@@ -7,10 +7,17 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from functools import lru_cache
 from pathlib import Path
 
-from wq_forum_rag.embeddings import EmbeddingBackend, build_embedding_backend
+from wq_forum_rag.embeddings import EmbeddingBackend, HashEmbeddingBackend, build_embedding_backend
 from wq_forum_rag.models import hash_text
+
+
+@lru_cache(maxsize=2048)
+def _hash_vector(text: str, dims: int, seed: str) -> tuple[float, ...]:
+    """Cache only a deterministic pure computation, never a mutable result."""
+    return tuple(HashEmbeddingBackend(dims=dims, seed=seed).embed_query(text))
 
 
 class CachedEmbeddingBackend:
@@ -94,7 +101,11 @@ class CachedEmbeddingBackend:
     ) -> None:
         if not misses:
             return
-        embedded = self.backend.embed_documents([item[2] for item in misses])
+        if type(self.backend) is HashEmbeddingBackend:
+            embedded = [list(_hash_vector(text, self.backend.dims, self.backend.seed))
+                        for _, _, text in misses]
+        else:
+            embedded = self.backend.embed_documents([item[2] for item in misses])
         for (index, _, _), vector in zip(misses, embedded, strict=True):
             vectors[index] = vector
 

@@ -7,10 +7,38 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
 from wq_forum_rag.search import tokenize_text
+
+_candidate_cache: OrderedDict[tuple, tuple[str, ...]] = OrderedDict()
+_candidate_lock = threading.RLock()
+
+
+def _candidate_state(conn: sqlite3.Connection):
+    # A caller's explicit read transaction may still see an older WAL snapshot.
+    # Never use a process-wide current-file cache for that transaction.
+    if conn.in_transaction:
+        return None
+    row = conn.execute('PRAGMA database_list').fetchone()
+    if not row or not row[2]:
+        return None
+    path = Path(row[2]).resolve()
+    values = [str(path)]
+    for suffix in ('', '-wal', '-journal'):
+        try:
+            stat = Path(str(path) + suffix).stat()
+            values.append((stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+        except FileNotFoundError:
+            values.append(None)
+    # A hot rollback journal can change the visible snapshot without rewriting
+    # the database itself. Disable caching while a nonempty journal exists.
+    if values[-1] is not None and values[-1][2]:
+        return None
+    return tuple(values)
 
 
 def init_search_schema(conn: sqlite3.Connection) -> bool:
@@ -57,11 +85,40 @@ def fts_candidates(
 ) -> list[str]:
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
-        return candidate_ids(conn, query, kind=kind, limit=limit, include_drafts=include_drafts)
+        return _cached_candidate_ids(conn, query, kind=kind, limit=limit, include_drafts=include_drafts)
+
+
+def _cached_candidate_ids(conn: sqlite3.Connection, query: str, *, kind: str, limit: int,
+                          include_drafts: bool = False) -> list[str]:
+    # Only fts_candidates' freshly opened, privately owned connection uses this
+    # cache. Arbitrary caller connections can hold implicit SELECT snapshots.
+    state = _candidate_state(conn)
+    key = (state, query, kind, limit, include_drafts)
+    if state is not None:
+        with _candidate_lock:
+            if key in _candidate_cache:
+                result = _candidate_cache.pop(key)
+                _candidate_cache[key] = result
+                if _candidate_state(conn) == state:
+                    return list(result)
+    result = _candidate_ids_uncached(conn, query, kind=kind, limit=limit,
+                                     include_drafts=include_drafts)
+    if state is not None and _candidate_state(conn) == state:
+        with _candidate_lock:
+            _candidate_cache[key] = tuple(result)
+            while len(_candidate_cache) > 128:
+                _candidate_cache.popitem(last=False)
+    return result
 
 
 def candidate_ids(conn: sqlite3.Connection, query: str, *, kind: str, limit: int,
                   include_drafts: bool = False) -> list[str]:
+    return _candidate_ids_uncached(conn, query, kind=kind, limit=limit,
+                                   include_drafts=include_drafts)
+
+
+def _candidate_ids_uncached(conn: sqlite3.Connection, query: str, *, kind: str, limit: int,
+                            include_drafts: bool = False) -> list[str]:
     """Bound candidates; old unicode61 indexes need literal Chinese substring lookup."""
     if limit <= 0 or not query.strip():
         return []

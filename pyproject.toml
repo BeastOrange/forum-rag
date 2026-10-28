@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-local-embeddings = ["fastembed>=0.3,<1"]
+local-embeddings = ["fastembed>=0.8,<1", "numpy>=1.26,<3"]
 dev = ["pytest>=8,<9"]
 
 [project.scripts]
