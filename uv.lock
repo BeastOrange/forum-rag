@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1518,15 +1518,13 @@ dev = [
 ]
 local-embeddings = [
     { name = "fastembed" },
-    { name = "numpy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12,<5" },
-    { name = "fastembed", marker = "extra == 'local-embeddings'", specifier = ">=0.8,<1" },
+    { name = "fastembed", marker = "extra == 'local-embeddings'", specifier = ">=0.3,<1" },
     { name = "mcp", specifier = ">=1,<2" },
-    { name = "numpy", marker = "extra == 'local-embeddings'", specifier = ">=1.26,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<9" },
     { name = "rich", specifier = ">=13.7,<15" },
     { name = "typer", specifier = ">=0.12,<1" },

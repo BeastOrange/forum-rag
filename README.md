@@ -21,6 +21,34 @@
 - **两类来源各自独立。** 仓库自带的官方研究文档与用户自己的论坛 JSON 共享存储文件，但在表、FTS 类型与 MCP 查询入口上彼此隔离，避免混淆来源。
 - **让检索结果可以沉淀。** Agent 可把有论坛原帖支撑的稳定结论保存成知识页，建立来源绑定、关系图与可导出的 Markdown Wiki，而不是每次从 chunk 临时拼接答案。
 
+## 给 AI 的轻量双语检索
+
+默认使用本地 SQLite 检索。调用方 AI 提供原问题和中英文关键词，即可一次取回去重后的帖子及证据，不需要准备本地模型：
+
+```text
+search_forum_batch(
+  query="如何使用 ts_backfill 处理缺失值？",
+  query_variants=["缺失值 ts_backfill", "missing values ts_backfill"],
+  top_k=6,
+  evidence_chars=600,
+  max_evidence_chars=6000
+)
+```
+
+工具保留实际命中查询、语言粗标记、片段 ID、内容版本与原文坐标。只在缺少上下文时调用 `get_forum_evidence` 读取该命中的邻块，需要完整讨论再用 `get_post`。语言标记和排序分数不代表事实可信度；本地搜索也不保证两种语言都有相关内容。翻译与问题理解由调用方 AI 完成，工具只执行有界的本地检索。
+
+CLI 使用相同流程：
+
+```bash
+uv run forum-rag search-batch "如何使用 ts_backfill 处理缺失值？" \
+  --variant "缺失值 ts_backfill" --variant "missing values ts_backfill" \
+  --db .cache/forum.sqlite3
+uv run forum-rag forum-evidence "<返回的 chunk_id>" --db .cache/forum.sqlite3 \
+  --expected-content-hash "<返回的 chunk_content_hash>" --max-chars 6000
+```
+
+最多接受三个附加查询；证据字符预算用于控制原文片段长度，不等同于整个 JSON 或 token 数量。调用方应检查超时、锁、索引降级和截断状态，避免将有界未命中解释成论坛没有答案。已有 MCP 客户端需要重启后才能看到新增工具。
+
 ## 从零开始：得到第一个结果
 
 ### 1. 安装并建立官方文档索引
@@ -82,7 +110,9 @@ uv run forum-rag search "alpha decay neutralization" --top-k 5
 uv run forum-rag show 12913566170391
 ```
 
-如需更强的本地语义召回，可安装可选依赖：
+默认检索不加载本地模型，也无需安装模型依赖。中英文查询由调用方 AI 提供，可通过 `search_forum_batch` 一次提交。
+
+以下可选依赖仅保留给已有代码层 embedding 后端调用；安装后不会启用独立语义召回，也不会新增 MCP 工具：
 
 ```bash
 uv sync --extra local-embeddings
@@ -117,7 +147,6 @@ python -m pip install -e ".[local-embeddings]"
 
 - **论坛索引：** 解析 community、topic、author、时间、投票/评论等轻量元数据，并从 HTML 清洗正文文本。
 - **增量更新：** `index` 会根据源 JSON 的路径、mtime 与 size 跳过未变更文件；替换导出或需要强制刷新时使用 `--rebuild`。`refresh` 则把论坛索引和来源 manifest 提交组合为一步。
-- **候选检索与排序：** SQLite FTS5 召回关键词候选；中文子串及缺少 FTS 时走有数量上限的字面查询，兼容已有索引。正常无命中返回空结果，索引错误向上传递。默认 256 维哈希向量只辅助词法排序，不具备模型级同义理解能力；独立的多语模型召回通过可选 `search-semantic` / `search_semantic_forum` 入口提供，默认搜索仍保持轻量词法路径。
 - **精确/近邻查询：** `find_by_exact` 面向 topic id、URL、标题、正文、评论与 chunk 的精确词命中；`related_posts` 基于标题寻找同社区相关主题。
 
 首次显式重建论坛索引：
@@ -312,56 +341,21 @@ uv run forum-rag ingest-docs Documents
 
 再从 MCP 客户端调用 `search_docs("neutralization")` 或 `get_doc("operators")`。若新工具仍不可见，优先检查客户端是否已重启，其次检查 `command` / `args` 是否指向正确的仓库目录。
 
-## 按电脑配置选择是否启用语义模型
+## 自动化任务的进程保护
 
-**本地模型是可选增强，不是使用本项目的前提。** 默认搜索只需要 SQLite 和基础 Python 依赖，不要求 GPU、NumPy、FastEmbed，也不会自动下载模型。模型负责生成检索向量，不是在电脑上运行一个用于回答问题的大语言模型；总结和判断仍交给 MCP 客户端。
-
-- 低配置、内存紧张或网络受限：只安装基础依赖，使用 `search` / `search_forum`。精确 ID、标题、领域术语优先使用这个路径。
-- 需要跨语言或同义表达检索：按需安装 `local-embeddings`，显式准备模型并构建索引，再调用语义或混合入口。是否更准确须看审核结果，不能仅凭它使用模型就判断更好。
-- 已有模型和索引：查询全程离线；下载失败不会影响默认词法搜索。
-
-本机 macOS ARM、CPU 单线程的本地实测：ONNX 权重约 224 MiB，45,927 片段的 384 维矩阵约 67 MiB，首次完整语义查询的进程峰值 RSS 约 **909 MiB**。这不等于通用最低内存：构建索引、并发、数据库和操作系统还需要空间。余量不足时保持基础模式，不自动启用模型；本次没有验证所有低配机器或 GPU。
-
-模型来自固定 revision，并对每个文件校验 SHA-256。模型准备步骤支持公网官方源与国内 HF-Mirror 的切换；HF-Mirror 是第三方公益镜像，不是 Hugging Face 官方站点。下载不会附带账号 token。参考 [Hugging Face 固定版本下载说明](https://huggingface.co/docs/huggingface_hub/guides/download)和 [HF-Mirror 使用说明](https://hf-mirror.com)。查询过程不进行源切换或在线请求。
-
-需要模型时，先安装可选依赖，再显式准备模型：
-
-```bash
-uv sync --extra local-embeddings
-uv run python scripts/prepare_semantic_model.py --model-dir .cache/models/minilm
-# 自动切换，优先国内源；默认则优先官方源
-uv run python scripts/prepare_semantic_model.py --source auto --preferred mirror
-# 固定单一源，或指定可信 HTTPS 源
-uv run python scripts/prepare_semantic_model.py --source official --attempts 3
-```
-
-默认每个文件、每个源最多尝试 3 次，连接超时 10 秒、读取超时 30 秒；网络错误、429、5xx 使用退避重试，404 等不重试同源并尝试下一源。可用 `--connect-timeout`、`--read-timeout` 调整（大于 0、最多 3600 秒）。完整本地缓存直接复用；下载中断或校验失败不会发布半成品，也不覆盖已有目录。已存在但不完整的目录会提示错误，请换一个输出目录或自行确认后处理。目标文件系统需要支持硬链接；不支持时会安全失败。当前重试会重新下载该文件，不提供断点续传。
-
-模型准备好后，显式构建索引：
-
-```bash
-uv run python scripts/build_semantic_index.py \
-  --db .cache/forum.sqlite3 --model-dir .cache/models/minilm \
-  --index-dir .cache/semantic-full --batch-size 16 --threads 1
-```
-
-基础模式无需执行以上步骤。官方源和国内源本机均完成了固定版本小文件下载及哈希验证；完整大权重在两条网络路径上的可用性未重复验证。
-
-交互终端中的构建默认单线程运行。自动化或 Agent 的非交互构建必须传入 `--lease-file`：由仍在管理任务的调用方先创建该文件，并持续更新其修改时间；工作进程不得自行续租。默认 30 秒无续租或达到 600 秒预算，就停止该构建的整个进程组。可用 `--lease-ttl`（最多 120 秒）和 `--timeout`（最多 86400 秒）调整预算。监管进程被强杀时，独立监控进程会通过控制管道断开回收任务组。
+长时间运行的测试、评测等自动化任务可通过 `scripts/run_bounded_task.py` 设置租约和时限。调用方先创建租约文件，在仍管理任务时持续更新其修改时间；工作进程不得自行续租。
 
 ```bash
 # 由调用方创建并续租；此示例本身不会自动续租
-uv run python scripts/build_semantic_index.py \
-  --db .cache/forum.sqlite3 --model-dir .cache/models/minilm \
-  --index-dir .cache/semantic-v2 --threads 1 \
-  --lease-file /tmp/forum-rag-build.lease --timeout 600 --lease-ttl 30
+touch /tmp/forum-rag-task.lease
+uv run python scripts/run_bounded_task.py \
+  --lease-file /tmp/forum-rag-task.lease --lease-ttl 30 --timeout 600 \
+  -- python -m pytest -q
 ```
 
-租约文件必须在启动前存在且未过期。停止续租或删除租约即可取消；正常结束也会清理遗留子进程。该保护目前使用 POSIX 进程组，适用于 macOS/Linux；不覆盖主动脱离进程组的程序。确实由使用者自行管理的非交互前台任务可显式传 `--foreground`，此时不提供租约和时限保护。不要用此选项启动无人管理的后台任务。
+默认 30 秒无续租，或达到总时限，就停止该任务的整个进程组。停止续租或删除租约可以取消任务；正常结束也会清理遗留子进程。监管进程被强杀时，独立监控进程会通过控制管道断开回收任务组。
 
-
-本轮 Agent 审核已对 14 条查询、158 项候选逐条判断，并运行评测。结论是**暂不默认启用当前语义模型**：部分排序指标改善，但 RAG 核心查询仍漏召回，两条模板负例均返回无关内容。这是机器审核和有限候选池的暂定结论，不是真人准确率，也不证明整个语料的召回率。
-
+租约文件必须在启动前存在且未过期；长任务需要调用方续租。该工具使用 POSIX 进程组，适用于 macOS/Linux，不覆盖主动脱离进程组的程序。
 
 ## 当前范围与后续方向
 

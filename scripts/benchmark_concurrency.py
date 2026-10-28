@@ -41,12 +41,8 @@ def normalize(result):
 
 
 def direct_call(db, query, args):
-    if args.mode == 'lexical':
-        from wq_forum_rag.mcp_server import search_forum
-        return search_forum(query, db=str(db), top_k=args.top_k)
-    from wq_forum_rag.semantic_retrieval import search_semantic_forum
-    return search_semantic_forum(db, query, index_dir=args.index_dir, model_dir=args.model_dir,
-                                 top_k=args.top_k, min_score=args.min_score, mode=args.mode)
+    from wq_forum_rag.mcp_server import search_forum
+    return search_forum(query, db=str(db), top_k=args.top_k)
 
 
 async def benchmark(call, queries, workers, requests, timeout):
@@ -74,7 +70,7 @@ async def benchmark(call, queries, workers, requests, timeout):
 async def run(args, db, queries):
     startup = time.perf_counter()
     if args.transport == 'direct':
-        # A bounded pool and a shared process allow the implementation's model cache to work.
+        # Bound simultaneous calls and reuse process-local lexical caches.
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(args.concurrency))
         loop = asyncio.get_running_loop()
         async def call(query):
@@ -92,12 +88,8 @@ async def run(args, db, queries):
         async with ClientSession(reader, writer) as session:
             await session.initialize()
             async def call(query):
-                name = 'search_forum' if args.mode == 'lexical' else 'search_semantic_forum'
                 arguments = {'db': str(db), 'query': query, 'top_k': args.top_k}
-                if args.mode != 'lexical':
-                    arguments.update(index_dir=str(args.index_dir), model_dir=str(args.model_dir),
-                                     min_score=args.min_score, mode=args.mode)
-                response = await session.call_tool(name, arguments)
+                response = await session.call_tool('search_forum', arguments)
                 if response.isError:
                     raise RuntimeError(str(response.content))
                 return response.structuredContent or json.loads(response.content[0].text)
@@ -123,17 +115,14 @@ async def runs(call, args, queries, startup_seconds):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--db', type=Path, required=True, help='Disposable SQLite database copy; semantic index must be built against this exact file')
+    parser.add_argument('--db', type=Path, required=True, help='Disposable SQLite database copy')
     parser.add_argument('--db-is-copy', action='store_true', required=True, help='Confirm --db is a disposable copy, not the original database')
-    parser.add_argument('--model-dir', type=Path)
-    parser.add_argument('--index-dir', type=Path)
     parser.add_argument('--queries', type=Path, required=True)
-    parser.add_argument('--mode', choices=('lexical', 'semantic', 'hybrid'), required=True)
+    parser.add_argument('--mode', choices=('lexical',), default='lexical')
     parser.add_argument('--transport', choices=('direct', 'mcp'), required=True)
     parser.add_argument('--concurrency', default='1,2,4,8')
     parser.add_argument('--requests', type=int, default=32)
     parser.add_argument('--top-k', type=int, default=5)
-    parser.add_argument('--min-score', type=float, default=.5)
     parser.add_argument('--timeout', type=float, default=60)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
@@ -143,8 +132,6 @@ def main():
         parser.error('concurrency must be comma-separated positive integers')
     if not args.db.is_file() or args.requests < 1 or args.top_k < 1 or args.timeout <= 0 or not args.concurrency or any(x < 1 for x in args.concurrency):
         parser.error('invalid database, concurrency, requests, top-k or timeout')
-    if args.mode != 'lexical' and (not args.model_dir or not args.index_dir):
-        parser.error('semantic and hybrid require model-dir and index-dir')
     if args.output.resolve() in (args.db.resolve(), args.queries.resolve()):
         parser.error('output must differ from inputs')
     fixture = json.loads(args.queries.read_text())
@@ -157,7 +144,7 @@ def main():
     result = asyncio.run(run(args, args.db.resolve(), queries))
     result.update(mode=args.mode, transport=args.transport, requested_concurrency=args.concurrency,
                   requested_per_run=args.requests, database_copy=str(args.db.resolve()),
-                  query_file=str(args.queries.resolve()), top_k=args.top_k, min_score=args.min_score)
+                  query_file=str(args.queries.resolve()), top_k=args.top_k)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
     return int(bool(result['first_call']['summary']['errors'] or any(r['summary']['errors'] for r in result['warm_runs'])))

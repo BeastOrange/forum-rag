@@ -134,23 +134,6 @@ def test_fresh_heartbeats_keep_owned_task_running(tmp_path):
     assert not updater.is_alive()
 
 
-def test_unattended_build_requires_owner_lease_before_loading_model(tmp_path):
-    build = SCRIPT.with_name('build_semantic_index.py')
-    result = subprocess.run([sys.executable, '-B', '-S', str(build), '--db', 'unused',
-                             '--model-dir', 'unused', '--index-dir', 'unused'],
-                            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=3)
-    assert result.returncode == 2
-    assert 'lease-file' in result.stderr
-    assert 'ModuleNotFoundError' not in result.stderr
-
-
-def test_build_help_does_not_load_optional_dependencies():
-    result = subprocess.run([sys.executable, '-B', '-S', str(SCRIPT.with_name('build_semantic_index.py')),
-                             '--help'], capture_output=True, text=True, timeout=3)
-    assert result.returncode == 0
-    assert '--lease-file' in result.stdout
-
-
 def test_watchdog_start_failure_never_executes_task(tmp_path, monkeypatch):
     lease = tmp_path / 'lease'
     lease.touch()
