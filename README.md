@@ -117,7 +117,7 @@ python -m pip install -e ".[local-embeddings]"
 
 - **论坛索引：** 解析 community、topic、author、时间、投票/评论等轻量元数据，并从 HTML 清洗正文文本。
 - **增量更新：** `index` 会根据源 JSON 的路径、mtime 与 size 跳过未变更文件；替换导出或需要强制刷新时使用 `--rebuild`。`refresh` 则把论坛索引和来源 manifest 提交组合为一步。
-- **候选检索与排序：** SQLite FTS5 召回关键词候选；中文子串及缺少 FTS 时走有数量上限的字面查询，兼容已有索引。正常无命中返回空结果，索引错误向上传递。默认 256 维哈希向量只辅助词法排序，不具备模型级同义理解能力；可选 embedding 接口不等于独立语义召回。
+- **候选检索与排序：** SQLite FTS5 召回关键词候选；中文子串及缺少 FTS 时走有数量上限的字面查询，兼容已有索引。正常无命中返回空结果，索引错误向上传递。默认 256 维哈希向量只辅助词法排序，不具备模型级同义理解能力；独立的多语模型召回通过可选 `search-semantic` / `search_semantic_forum` 入口提供，默认搜索仍保持轻量词法路径。
 - **精确/近邻查询：** `find_by_exact` 面向 topic id、URL、标题、正文、评论与 chunk 的精确词命中；`related_posts` 基于标题寻找同社区相关主题。
 
 首次显式重建论坛索引：
@@ -257,7 +257,7 @@ PYTHONPATH=src python scripts/evaluate_search.py \
   --transport mcp --repeats 3 --output /tmp/search-report.json
 ```
 
-脚本记录语料规模、源码指纹、已知目标召回、无答案误返回和首次/重复调用耗时。默认 60 条检查针对本项目的本地导出构造；它们不是完整的人工相关性标注，不能据此声称通用准确率。请用 `--cases` 提供符合你自己数据的标注。首次调用也不代表操作系统冷缓存。参见 [本轮验证记录](docs/search-quality-verification.md)。
+脚本记录语料规模、源码指纹、已知目标召回、无答案误返回和首次/重复调用耗时。默认 60 条检查针对本项目的本地导出构造；它们不是完整的人工相关性标注，不能据此声称通用准确率。请用 `--cases` 提供符合你自己数据的标注。首次调用也不代表操作系统冷缓存。评测输出请保存在本地，不提交生成的报告和日志。
 
 知识页仍写入同一 SQLite，相关表包括：
 
@@ -312,10 +312,48 @@ uv run forum-rag ingest-docs Documents
 
 再从 MCP 客户端调用 `search_docs("neutralization")` 或 `get_doc("operators")`。若新工具仍不可见，优先检查客户端是否已重启，其次检查 `command` / `args` 是否指向正确的仓库目录。
 
+## 按电脑配置选择是否启用语义模型
+
+**本地模型是可选增强，不是使用本项目的前提。** 默认搜索只需要 SQLite 和基础 Python 依赖，不要求 GPU、NumPy、FastEmbed，也不会自动下载模型。模型负责生成检索向量，不是在电脑上运行一个用于回答问题的大语言模型；总结和判断仍交给 MCP 客户端。
+
+- 低配置、内存紧张或网络受限：只安装基础依赖，使用 `search` / `search_forum`。精确 ID、标题、领域术语优先使用这个路径。
+- 需要跨语言或同义表达检索：按需安装 `local-embeddings`，显式准备模型并构建索引，再调用语义或混合入口。是否更准确须看审核结果，不能仅凭它使用模型就判断更好。
+- 已有模型和索引：查询全程离线；下载失败不会影响默认词法搜索。
+
+本机 macOS ARM、CPU 单线程的本地实测：ONNX 权重约 224 MiB，45,927 片段的 384 维矩阵约 67 MiB，首次完整语义查询的进程峰值 RSS 约 **909 MiB**。这不等于通用最低内存：构建索引、并发、数据库和操作系统还需要空间。余量不足时保持基础模式，不自动启用模型；本次没有验证所有低配机器或 GPU。
+
+模型来自固定 revision，并对每个文件校验 SHA-256。模型准备步骤支持公网官方源与国内 HF-Mirror 的切换；HF-Mirror 是第三方公益镜像，不是 Hugging Face 官方站点。下载不会附带账号 token。参考 [Hugging Face 固定版本下载说明](https://huggingface.co/docs/huggingface_hub/guides/download)和 [HF-Mirror 使用说明](https://hf-mirror.com)。查询过程不进行源切换或在线请求。
+
+需要模型时，先安装可选依赖，再显式准备模型：
+
+```bash
+uv sync --extra local-embeddings
+uv run python scripts/prepare_semantic_model.py --model-dir .cache/models/minilm
+# 自动切换，优先国内源；默认则优先官方源
+uv run python scripts/prepare_semantic_model.py --source auto --preferred mirror
+# 固定单一源，或指定可信 HTTPS 源
+uv run python scripts/prepare_semantic_model.py --source official --attempts 3
+```
+
+默认每个文件、每个源最多尝试 3 次，连接超时 10 秒、读取超时 30 秒；网络错误、429、5xx 使用退避重试，404 等不重试同源并尝试下一源。可用 `--connect-timeout`、`--read-timeout` 调整（大于 0、最多 3600 秒）。完整本地缓存直接复用；下载中断或校验失败不会发布半成品，也不覆盖已有目录。已存在但不完整的目录会提示错误，请换一个输出目录或自行确认后处理。目标文件系统需要支持硬链接；不支持时会安全失败。当前重试会重新下载该文件，不提供断点续传。
+
+模型准备好后，显式构建索引：
+
+```bash
+uv run python scripts/build_semantic_index.py \
+  --db .cache/forum.sqlite3 --model-dir .cache/models/minilm \
+  --index-dir .cache/semantic-full --batch-size 16 --threads 1
+```
+
+基础模式无需执行以上步骤。官方源和国内源本机均完成了固定版本小文件下载及哈希验证；完整大权重在两条网络路径上的可用性未重复验证。
+
+本轮 Agent 审核已对 14 条查询、158 项候选逐条判断，并运行评测。结论是**暂不默认启用当前语义模型**：部分排序指标改善，但 RAG 核心查询仍漏召回，两条模板负例均返回无关内容。这是机器审核和有限候选池的暂定结论，不是真人准确率，也不证明整个语料的召回率。
+
+
 ## 当前范围与后续方向
 
 已实现：本地 JSON 解析、SQLite 原帖与 chunk 索引、Markdown 文档摄入、FTS5 + hybrid search、来源 manifest、知识页与来源绑定、typed graph、Wiki 导出、backlink boost 与 embedding cache。
 
-暂未实现：独立的模型语义召回及其完整准确率评测、PDF/截图/音频/视频等多模态摄入、定时或 always-on ingestion、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
+暂未实现：真人标注的完整准确率评测、PDF/截图/音频/视频等多模态摄入、定时或 always-on ingestion、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
 
 对外 CLI / MCP contract 与内部 `parser`、`storage`、`search` 模块解耦；后续替换 embedding backend 或调优 chunk/search 策略，不应改变既有 CLI/MCP 接口。

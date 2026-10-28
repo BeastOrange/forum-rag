@@ -12,3 +12,10 @@ build/
 WQPCommunityState_*.json
 *.pdf
 .DS_Store
+
+# Local evaluation output and implementation notes
+/docs/evaluation/
+/docs/superpowers/
+/docs/search-quality-verification.md
+/docs/semantic-performance-verification.md
+/docs/model-portability-and-review.md
