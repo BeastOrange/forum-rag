@@ -190,18 +190,30 @@ def _matches_filters(chunk: dict[str, Any], filters: dict[str, Any] | None) -> b
     return True
 
 
-def _find_snippet_start(text: str, query: str) -> int:
+def _first_literal_match_start(text: str, candidates: list[str]) -> int | None:
+    """Find the earliest lowercased literal match, returning an original offset.
+
+    Keep str.lower substring semantics (not re.I or casefold equivalences).
+    Unicode lowercase expansion, such as İ -> i + combining dot, must not
+    shift source offsets. Contextual lowercasing changes sigma's form but not
+    its width, so per-character widths map the full-string lowercase offset.
+    """
     normalized_text = text.lower()
-    query_candidates = [query] + tokenize_text(query)
-    starts = [
-        normalized_text.find(candidate.lower())
-        for candidate in query_candidates
-        if candidate
-    ]
-    starts = [start for start in starts if start >= 0]
-    if not starts:
-        return 0
-    return max(min(starts) - 30, 0)
+    starts = [normalized_text.find(candidate.lower()) for candidate in candidates if candidate]
+    start = min((position for position in starts if position >= 0), default=None)
+    if start is None or len(normalized_text) == len(text):
+        return start
+    normalized_offset = 0
+    for original_offset, char in enumerate(text):
+        normalized_offset += len(char.lower())
+        if normalized_offset > start:
+            return original_offset
+    return None
+
+
+def _find_snippet_start(text: str, query: str) -> int:
+    start = _first_literal_match_start(text, [query] + tokenize_text(query))
+    return max(start - 30, 0) if start is not None else 0
 
 
 def _build_snippet(query: str, chunk: dict[str, Any], max_chars: int = SNIPPET_WINDOW) -> str:

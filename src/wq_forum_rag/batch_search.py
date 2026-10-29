@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .read_worker import cancelled, check_cancelled
-from .search import lexical_score
+from .search import _first_literal_match_start, lexical_score
 from .search_index import candidate_ids
 
 _CANDIDATES = 200
@@ -92,10 +92,9 @@ def _excerpt(row, size, query=''):
     start = 0
     if len(text) > size and query:
         terms = re.findall(r'[A-Za-z0-9_]+|[\u4e00-\u9fff]+', query)
-        positions = [text.lower().find(term.lower()) for term in terms]
-        positions = [position for position in positions if position >= 0]
-        if positions:
-            start = min(max(min(positions) - size // 4, 0), len(text) - size)
+        position = _first_literal_match_start(text, terms)
+        if position is not None:
+            start = min(max(position - size // 4, 0), len(text) - size)
     end = min(start + size, len(text))
     return {'chunk_id': row['chunk_id'], 'chunk_index': row['chunk_index'],
             'chunk_content_hash': row['chunk_hash'], 'topic_content_hash': row['topic_hash'],

@@ -1,4 +1,5 @@
 """Code comparisons must survive the search surface's HTML cleanup."""
+from contextlib import closing
 import sqlite3
 
 import pytest
@@ -15,7 +16,7 @@ from wq_forum_rag.search_index import candidate_ids
 ])
 def test_candidate_code_identifier_reaches_batch_results(tmp_path, expression):
     path = tmp_path / 'forum.sqlite3'
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.executescript('''
             CREATE TABLE topics(topic_id TEXT PRIMARY KEY, title TEXT, community_title TEXT, url TEXT, content_hash TEXT);
             CREATE TABLE chunks(chunk_id TEXT PRIMARY KEY, topic_id TEXT, chunk_index INTEGER, chunk_level INTEGER,
