@@ -62,7 +62,11 @@ def _forum_tables_available(conn):
 
 
 def _language(title, text):
-    text = re.sub(r'(?m)^\s*(?:Title:|Body:|Comments:|\[Comment \d+\].*)\s*$', ' ', (title or '') + '\n' + (text or ''))
+    text = (title or '') + '\n' + (text or '')
+    # Topic.document_text uses an inline "Title: actual title" wrapper.
+    # Remove only labels, retaining the title/body text used for detection.
+    text = re.sub(r'(?m)^[ \t]*(?:Title:|Body:|Comments:)[ \t]*', '', text)
+    text = re.sub(r'(?m)^[ \t]*\[Comment \d+\][^\n]*', '', text)
     text = re.sub(r'```[\s\S]*?```|`[^`]*`|(?<![A-Za-z])[A-Z]{2,}(?![A-Za-z])', ' ', text)
     text = _LITERAL.sub(' ', text)
     zh = bool(re.search(r'[\u4e00-\u9fff]', text))
