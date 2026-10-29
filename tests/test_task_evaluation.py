@@ -1,6 +1,7 @@
 import copy
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -31,6 +32,32 @@ def fixture_data():
         {'case_id': 'three', 'status': 'pending', 'source': 'unreviewed', 'reviewer': None, 'reviewed_at': None, 'answer_supported': None, 'needs_online': None, 'unsupported_claim': None, 'reason': 'Waiting.', 'evidence_ids': [], 'unsupported_quotes': []},
     ]}
     return runs, judgments
+
+
+@pytest.mark.parametrize('chinese_file', ['runs', 'judgments'])
+def test_utf8_inputs_work_with_non_utf8_process_locale(tmp_path, chinese_file):
+    runs, judgments = fixture_data()
+    if chinese_file == 'runs':
+        runs['cases'][0]['task'] = '查询中性化的本地证据'
+        runs['cases'][0]['evidence'][0]['verbatim'] = '中文证据与 English evidence'
+    else:
+        judgments['cases'][0]['reason'] = '证据支持此回答。'
+    paths = [tmp_path / name for name in ('runs.json', 'judgments.json', 'report.json')]
+    for path, data in zip(paths, (runs, judgments)):
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+    env = {**os.environ, 'LC_ALL': 'C', 'LANG': 'C',
+           'PYTHONUTF8': '0', 'PYTHONCOERCECLOCALE': '0'}
+    probe = subprocess.run([sys.executable, '-X', 'utf8=0', '-c',
+                            'import locale; print(locale.getencoding())'],
+                           env=env, capture_output=True)
+    assert probe.returncode == 0, probe.stderr
+    if probe.stdout.strip().lower().replace(b'-', b'') == b'utf8':
+        pytest.skip('Host cannot provide a non-UTF-8 locale')
+    result = subprocess.run([sys.executable, '-X', 'utf8=0', str(SCRIPT),
+                             '--runs', str(paths[0]), '--judgments', str(paths[1]),
+                             '--output', str(paths[2])], env=env, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(paths[2].read_text(encoding='utf-8')) == module.evaluate(runs, judgments)
 
 
 def test_unknown_and_failure_stay_in_full_denominator():

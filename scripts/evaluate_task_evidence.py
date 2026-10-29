@@ -181,9 +181,10 @@ def main():
     for path in (args.runs, args.judgments):
         if args.output.resolve() == path.resolve() or (args.output.exists() and path.exists() and args.output.samefile(path)):
             parser.error('output must differ from input files')
-    report = evaluate(json.loads(args.runs.read_text()), json.loads(args.judgments.read_text()))
+    report = evaluate(json.loads(args.runs.read_text(encoding='utf-8')),
+                      json.loads(args.judgments.read_text(encoding='utf-8')))
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+    args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
 if __name__ == '__main__':
