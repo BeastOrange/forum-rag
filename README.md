@@ -321,6 +321,10 @@ uv run forum-rag knowledge-graph alpha/neutralization-decay --depth 2
 uv run forum-rag knowledge-export --out .cache/wiki
 ```
 
+## 检查本地环境
+
+运行 `uv run forum-rag doctor --db .cache/forum.sqlite3` 可查看 Python、SQLite、MCP SDK、论坛表和 FTS 索引状态。此命令只读，不创建数据库、不下载模型，也不重建索引。输出为 JSON，附有需要手动执行的修复建议；`ready` 表示本地依赖和索引结构可用，不代表已经验证 MCP 客户端连接或检索准确度。
+
 ## 维护已有安装
 
 拉取新代码后，以下步骤是幂等的：

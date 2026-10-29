@@ -40,6 +40,16 @@ def _render_search(results: list[dict[str, Any]]) -> None:
     console.print(table)
 
 
+@app.command("doctor")
+def doctor_command(
+    db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", dir_okay=False),
+) -> None:
+    """Check dependencies and an existing index without writing or loading models."""
+    from .diagnostics import diagnose
+    import json
+    typer.echo(json.dumps(diagnose(db_path), ensure_ascii=False, indent=2))
+
+
 @app.command("index")
 def index_command(
     json_path: Path = typer.Option(..., "--json", exists=True, dir_okay=False, readable=True),
