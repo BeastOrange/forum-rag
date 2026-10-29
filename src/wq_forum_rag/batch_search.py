@@ -7,6 +7,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from .read_worker import cancelled, check_cancelled
 from .search import lexical_score
 from .search_index import candidate_ids
 
@@ -33,16 +34,19 @@ def _string(name, value, *, max_length=512):
 
 @contextmanager
 def _snapshot(db_path):
+    check_cancelled()
     path = Path(db_path).resolve(strict=True)
     deadline = time.monotonic() + _TIMEOUT_SECONDS
     conn = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=_TIMEOUT_SECONDS)
     conn.row_factory = sqlite3.Row
-    conn.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+    conn.set_progress_handler(lambda: int(cancelled() or time.monotonic() >= deadline), 1000)
     try:
         conn.execute('BEGIN')
         yield conn, deadline
         _check_deadline(deadline)
     except sqlite3.OperationalError as exc:
+        if 'interrupted' in str(exc).lower():
+            check_cancelled()
         if 'interrupted' in str(exc).lower() and time.monotonic() >= deadline:
             raise TimeoutError('SQLite request exceeded time budget') from exc
         raise
@@ -51,6 +55,7 @@ def _snapshot(db_path):
 
 
 def _check_deadline(deadline):
+    check_cancelled()
     if time.monotonic() >= deadline:
         raise TimeoutError('SQLite request exceeded time budget')
 
@@ -164,6 +169,7 @@ def search_forum_batch(db_path, query: str, *, query_variants: list[str] | None 
             for route, ids_for_route in zip(routes, route_lists):
                 per_topic = {}
                 for item in ids_for_route:
+                    _check_deadline(deadline)
                     row = rows_by_id.get(item)
                     if (not row or (id_lookup and row['topic_id'] != query)
                             or (not id_lookup and not _matches((row['title'] or '') + ' ' + (row['content'] or ''), literals))):

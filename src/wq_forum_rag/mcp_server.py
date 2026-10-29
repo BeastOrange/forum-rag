@@ -18,6 +18,7 @@ from .documents import DocumentStore, ingest_documents
 from .evolution import EvolutionService
 from .indexer import ForumDatabaseBusyError, raise_if_database_locked
 from .manifest import SourceManifestService
+from .read_worker import ReadBusy, run_read
 from .search_cache import CachedEmbeddingBackend
 from .search_index import rebuild_search_index as rebuild_search_index_impl
 from .search_records import search_doc_records, search_knowledge_records
@@ -58,9 +59,11 @@ async def search_forum_batch(
 
     db_path = _resolve_db_path(db)
     try:
-        result = await asyncio.to_thread(
+        result = await run_read(
             retrieve, db_path, query, query_variants=query_variants, top_k=top_k,
             evidence_chars=evidence_chars, max_evidence_chars=max_evidence_chars)
+    except ReadBusy as exc:
+        return {"status": "busy", "query": query, "db": str(db_path), "results": [], "reason": str(exc)}
     except TimeoutError as exc:
         return {"status": "timeout", "query": query, "db": str(db_path), "results": [], "reason": str(exc)}
     except sqlite3.OperationalError as exc:
@@ -86,9 +89,11 @@ async def get_forum_evidence(
 
     db_path = _resolve_db_path(db)
     try:
-        result = await asyncio.to_thread(
+        result = await run_read(
             retrieve, db_path, chunk_id, before=before, after=after, max_chars=max_chars,
             expected_content_hash=expected_content_hash)
+    except ReadBusy as exc:
+        return {"status": "busy", "chunk_id": chunk_id, "db": str(db_path), "evidence": [], "reason": str(exc)}
     except TimeoutError as exc:
         return {"status": "timeout", "chunk_id": chunk_id, "db": str(db_path), "evidence": [], "reason": str(exc)}
     except sqlite3.OperationalError as exc:
