@@ -19,7 +19,16 @@ CONTENT_WEIGHT = 1.0
 EXACT_MATCH_BONUS = 1.5
 SNIPPET_WINDOW = 180
 WORD_PATTERN = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]+")
-TAG_PATTERN = re.compile(r"<[^>]+>")
+# Strip a conservative markup subset: bare tags and explicitly assigned
+# attributes. Free-form comparisons (including a<b and flag>0) remain text.
+# Bare a<b>c is inherently ambiguous and is treated as a <b> tag; valueless
+# attributes and malformed markup are retained rather than guessing them away.
+TAG_PATTERN = re.compile(
+    r"</[A-Za-z][A-Za-z0-9:-]*\s*>"
+    r"|<[A-Za-z][A-Za-z0-9:-]*"
+    r"(?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=\s*"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))*\s*/?>"
+)
 SPACE_PATTERN = re.compile(r"\s+")
 
 
