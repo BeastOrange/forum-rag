@@ -67,50 +67,23 @@ If the user provides an existing SQLite database, do not reindex unless asked. P
 
 ### Upgrading An Existing Install
 
-If the user already had a working MCP setup and just ran `git pull`, perform exactly these steps (all idempotent — safe to run twice):
-
-This release upgrades the official MCP Python SDK from 1.x to 2.x. Synchronize dependencies before restarting the MCP client. The existing SQLite index does not need rebuilding; stdio commands and tool arguments are unchanged.
+For an existing installation, synchronize the environment and inspect the selected index before reconnecting the client:
 
 ```bash
-# 1. Verify you are in the project root
 cd /absolute/path/to/forum-rag
-uv sync
-
-# 2. Ingest the markdown docs shipped in repo.
-#    - New tables `documents` / `doc_chunks` are created lazily; existing
-#      forum tables are untouched.
-#    - Re-runs are skipped per content_hash, no wasted embedding.
-uv run forum-rag ingest-docs Documents
-
-# 3. Ask the user to restart their MCP client (Claude Desktop / Claude Code / Cursor / etc).
-#    The MCP server is a long-lived process spawned at client startup; it
-#    does NOT hot-reload Python code. Without restart, the new tools
-#    search_docs / get_doc / ingest_docs will be invisible to you.
+uv sync --locked
+uv run forum-rag doctor --db .cache/forum.sqlite3
 ```
 
-For an existing Conda installation, activate its environment and use the installed entry point instead:
+For Conda, activate the chosen environment, run `python -m pip install -e .`, and use `forum-rag doctor --db .cache/forum.sqlite3`.
 
-```bash
-conda activate forum-rag
-python -m pip install -e .
-forum-rag ingest-docs Documents
-```
+This upgrade uses the official MCP Python SDK 2.x; the separate `fastmcp` package is not required. Existing stdio commands and tool arguments remain compatible. Batch search additionally accepts optional `compact=True`.
 
-Only rerun `python -m pip install -e .` for a Conda installation when the upgrade changed `pyproject.toml`.
+Do not delete or rebuild an existing forum index for a code upgrade. Only run `ingest-docs Documents` when the user wants to add or update shipped documentation. Its default pruning removes documents absent from that directory; use `--no-prune` if other imported documents must be retained. Do not re-run forum `refresh` unless source data actually needs updating.
 
-Do NOT attempt these on upgrade — they are not required and may waste time:
+Restart or reconnect the MCP client after updating code/dependencies. The server does not hot-reload. Verify that 22 tools are visible; for an index that already contains official documents, `search_docs("neutralization")` and `get_doc("operators")` should work. Without imported documents, empty document results are expected and do not prove a transport failure. `doctor` checks local structure, not client connectivity or answer accuracy.
 
-- Delete or migrate `forum.sqlite3` — schema additions are backward compatible.
-- Re-run `refresh` on the forum JSON — forum data is untouched by this upgrade.
-
-To **verify** the upgrade succeeded, after the client restart, call:
-
-```text
-search_docs("neutralization")   # must return non-empty results
-get_doc("operators")            # must return a document with full body
-```
-
-If `search_docs` is not in your tool list at all, the client was not restarted, or it points at a different repo path. Tell the user explicitly rather than pretending the tool is unavailable.
+If tools are missing, check the client's executable and working directory. The removed standalone semantic experiment is not required: use `search_forum_batch` with caller-provided bilingual queries instead.
 
 ### MCP Client Configuration
 
@@ -183,7 +156,8 @@ search_forum_batch(
     query_variants=["缺失值 ts_backfill", "missing values ts_backfill"],
     top_k=6,
     evidence_chars=600,
-    max_evidence_chars=6000
+    max_evidence_chars=6000,
+    compact=True
 )
 ```
 
@@ -205,7 +179,7 @@ get_forum_evidence(
 
 Chunk/document offsets refer to the assembled export text, which includes titles, body text, and comments. They are not raw HTML or individual-comment offsets. Overlapping chunks can repeat text; they do not establish independent supporting sources. A stale hash requires a fresh search. Use `get_post(topic_id)` when the complete thread, individual comments, or broader context is needed.
 
-Search and evidence budgets bound excerpt text, not the complete JSON response or model tokens. Check explicit timeout, lock, degraded-index, and truncation states before drawing conclusions. An empty bounded search does not prove that the forum has no answer. Consider online lookup when local sources are missing, stale, or insufficient; avoid repeating online calls when local evidence already supports the answer.
+Use compact=True to omit duplicated snippet fields while preserving evidence. The two MCP evidence tools share two worker slots: busy means retry later, not no match. Cancellation is cooperative; lock waits may delay cleanup. Search and evidence budgets bound excerpt text, not the complete JSON response or model tokens. Check explicit timeout, lock, degraded-index, and truncation states before drawing conclusions. An empty bounded search does not prove that the forum has no answer. Consider online lookup when local sources are missing, stale, or insufficient; avoid repeating online calls when local evidence already supports the answer.
 
 For exact IDs, URLs, or error strings, `find_by_exact` remains available. For official API/operator definitions, prefer `search_docs`. For compiled knowledge or knowledge-page maintenance, `build_evolution_context` remains the combined knowledge/forum entry.
 

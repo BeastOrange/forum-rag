@@ -5,12 +5,12 @@
 </p>
 
 <p align="center">
-  <strong>面向量化研究的本地检索与证据知识层。</strong><br>
-  把官方 Markdown 文档、你的论坛导出和可复用知识页放入同一份 SQLite；通过 CLI 或 MCP 让 Agent 先找到证据，再组织答案。
+  <strong>给 AI 使用的轻量本地检索与证据工具。</strong><br>
+  用 SQLite 保存官方文档、个人论坛导出和知识页，让 AI 先查本地证据，减少反复调用在线论坛 MCP。默认不加载本地模型。
 </p>
 
 <p align="center">
-  <code>Python 3.11+</code> · <code>SQLite / FTS5</code> · <code>CLI + MCP</code> · 可选 <code>fastembed</code>
+  <code>Python 3.11+</code> · <code>SQLite / FTS5</code> · <code>MCP SDK 2.x</code> · 默认无模型
 </p>
 
 > **给 AI Agent 的入口：** 若希望 Claude Code、Codex、Gemini CLI 等直接操作本项目，请优先提供 [`README_AGENT.md`](README_AGENT.md)。
@@ -31,7 +31,8 @@ search_forum_batch(
   query_variants=["缺失值 ts_backfill", "missing values ts_backfill"],
   top_k=6,
   evidence_chars=600,
-  max_evidence_chars=6000
+  max_evidence_chars=6000,
+  compact=True
 )
 ```
 
@@ -42,7 +43,7 @@ CLI 使用相同流程：
 ```bash
 uv run forum-rag search-batch "如何使用 ts_backfill 处理缺失值？" \
   --variant "缺失值 ts_backfill" --variant "missing values ts_backfill" \
-  --db .cache/forum.sqlite3
+  --compact --db .cache/forum.sqlite3
 uv run forum-rag forum-evidence "<返回的 chunk_id>" --db .cache/forum.sqlite3 \
   --expected-content-hash "<返回的 chunk_content_hash>" --max-chars 6000
 ```
@@ -91,7 +92,7 @@ forum-rag ingest-docs Documents
 uv run forum-rag search-docs "neutralization" --top-k 3
 ```
 
-本仓库的本地索引中，这个查询会命中 `Risk Neutralization Default setting`、`Double Neutralization` 和 `Neutralization` 等文档。也可以查看完整内容：
+完整标题命中优先，因此这个查询优先返回 `Neutralization`；其他文档依词法排序。也可以查看完整内容：
 
 ```bash
 uv run forum-rag show-doc neutralization
@@ -134,7 +135,7 @@ python -m pip install -e ".[local-embeddings]"
 | [`Documents/`](Documents/) 中 74 篇官方 Markdown 文档 | ✅ | `git clone` 后执行 `ingest-docs Documents`。 |
 | 论坛 SQLite（例如 `.cache/forum.sqlite3`） | ❌ | 由每位用户使用自己的平台帐号导出 JSON 后，在本地运行 `refresh` / `index` 建立。 |
 
-最小交付物是：**本仓库源码 + 用户自己的论坛 JSON**。`Documents/` 对所有 clone 用户开箱即用。
+仅使用自带官方文档时，源码即可开始；检索个人论坛内容时，再提供自己的论坛 JSON 或既有 SQLite。`Documents/` 随源码分发，首次使用需执行 `ingest-docs Documents`。
 
 如果你选择私下共享已经构建好的 SQLite，对方可以跳过论坛离线索引，只需将 `FORUM_RAG_DB` 指向该文件。请先自行评估相关平台条款及数据分享风险；该数据库默认不应提交到 Git。
 
@@ -142,7 +143,7 @@ python -m pip install -e ".[local-embeddings]"
 
 ```text
 官方 Documents/ ─┐
-                  ├─> SQLite tables + FTS5 candidates ─> hybrid rerank ─> CLI / MCP
+                  ├─> SQLite / FTS5 候选 ─> 词法排序 / 多查询 RRF ─> CLI / MCP
 个人论坛 JSON ───┘                                                │
                                                                    └─> 可追溯知识页与 Markdown Wiki
 ```
@@ -173,6 +174,9 @@ uv run forum-rag index \
 | 目的 | 命令 |
 | --- | --- |
 | 查看所有命令 | `uv run forum-rag --help` |
+| 批量双语证据 | `uv run forum-rag search-batch "query" --variant "另一语言关键词" --compact` |
+| 扩展命中证据 | `uv run forum-rag forum-evidence CHUNK_ID --max-chars 6000` |
+| 检查环境与索引 | `uv run forum-rag doctor --db .cache/forum.sqlite3` |
 | 搜索 / 查看论坛 | `uv run forum-rag search "query"` · `uv run forum-rag show TOPIC_ID` |
 | 搜索 / 查看官方文档 | `uv run forum-rag search-docs "query"` · `uv run forum-rag show-doc SLUG` |
 | 文档入库 | `uv run forum-rag ingest-docs Documents` |
@@ -293,18 +297,6 @@ Windows 下将可执行文件路径改为 `...\envs\forum-rag\Scripts\forum-rag-
 
 显式归档：`review_knowledge_page(slug, "archived", note="废弃原因", replacement_slug="替代页")`；替代页可省略。保留历史和来源，不按发布时间或访问次数自动覆盖、删除或改写其他页面。已有归档状态继续使用。
 
-### 重复测量检索结果
-
-使用数据库副本运行：
-
-```bash
-PYTHONPATH=src python scripts/evaluate_search.py \
-  --db /path/to/forum-copy.sqlite3 \
-  --transport mcp --repeats 3 --output /tmp/search-report.json
-```
-
-脚本记录语料规模、源码指纹、已知目标召回、无答案误返回和首次/重复调用耗时。默认 60 条检查针对本项目的本地导出构造；它们不是完整的人工相关性标注，不能据此声称通用准确率。请用 `--cases` 提供符合你自己数据的标注。首次调用也不代表操作系统冷缓存。评测输出请保存在本地，不提交生成的报告和日志。
-
 知识页仍写入同一 SQLite，相关表包括：
 
 - `knowledge_pages`：概念、规则、经验等页面
@@ -323,48 +315,48 @@ uv run forum-rag knowledge-graph alpha/neutralization-decay --depth 2
 uv run forum-rag knowledge-export --out .cache/wiki
 ```
 
+## 验证检索与回答
+
+使用数据库副本运行：
+
+```bash
+PYTHONPATH=src python scripts/evaluate_search.py \
+  --db /path/to/forum-copy.sqlite3 \
+  --transport mcp --repeats 3 --output /tmp/search-report.json
+```
+
+脚本记录语料规模、源码指纹、已知目标召回、无答案误返回和首次/重复调用耗时。默认 60 条检查针对本项目的本地导出构造；它们不是完整的人工相关性标注，不能据此声称通用准确率。请用 `--cases` 提供符合你自己数据的标注。首次调用也不代表操作系统冷缓存。评测输出请保存在本地，不提交生成的报告和日志。
+
+对于 AI 回答，`scripts/evaluate_task_evidence.py` 可核对保存的任务、实际回答、证据和独立判断：
+
+```bash
+uv run python scripts/evaluate_task_evidence.py \
+  --runs /path/to/saved-runs.json --judgments /path/to/judgments.json \
+  --output /tmp/task-report.json
+```
+
+输入格式见脚本开头。脚本不会调用 AI 或检索工具；没有保存回答的记录保持未知，拒答与有证据的实质回答分别统计。机器判断不是人工准确率，`needs_online` 也不是实际线上调用节省量。它用于定位失败和复核证据，不替代人工验收。
+
 ## 检查本地环境
 
 运行 `uv run forum-rag doctor --db .cache/forum.sqlite3` 可查看 Python、SQLite、MCP SDK、论坛表和 FTS 索引状态。此命令只读，不创建数据库、不下载模型，也不重建索引。输出为 JSON，附有需要手动执行的修复建议；`ready` 表示本地依赖和索引结构可用，不代表已经验证 MCP 客户端连接或检索准确度。
 
 ## 维护已有安装
 
-拉取新代码后，以下步骤是幂等的：
-
-本次升级将官方 MCP Python SDK 从 1.x 更新为 2.x，需要同步依赖并重启 MCP 客户端。已有 SQLite 索引无需重建；stdio 启动命令和工具参数保持不变。
+本次升级使用官方 `mcp>=2.3.0,<3`，不需要独立的 `fastmcp` 包。先同步依赖，再重启 MCP 客户端；已有论坛索引无需重建，原 stdio 启动命令和已有参数保持兼容。
 
 ```bash
 cd /path/to/forum-rag
 git pull
-uv sync
-uv run forum-rag ingest-docs Documents
+uv sync --locked
+uv run forum-rag doctor --db .cache/forum.sqlite3
 ```
 
-Conda 环境中，先激活环境，再运行：
+Conda 环境中执行 `python -m pip install -e .`，再运行 `forum-rag doctor --db .cache/forum.sqlite3`。只有需要新增或更新仓库文档时，才另外执行 `ingest-docs Documents`；已有论坛数据不需要重新 `refresh`，也不要删除数据库。如果索引还含其他目录导入的文档，摄入时可加 `--no-prune`，保留目录外文档。
 
-```bash
-conda activate forum-rag
-python -m pip install -e .
-forum-rag ingest-docs Documents
-```
+然后重启或重新连接 MCP 客户端。服务进程不会热重载代码；重启后应发现 22 个工具。已摄入官方文档时，可调用 `search_docs("neutralization")`、`get_doc("operators")`；有论坛数据时再验证 `search_forum_batch`。工具不可见时，检查客户端是否仍指向旧环境或错误的仓库目录。
 
-通常**不需要**：
-
-- `uv sync`：确认本次升级没有新增或变更依赖时不必执行。
-- `pip install -e .`：`uv run` 已基于当前源码运行。
-- 删除、迁移或重建既有 `forum.sqlite3`：文档相关表以 additive 方式创建，不影响已有论坛数据。
-- 重跑 `refresh`：仅升级官方文档能力时，论坛索引不受影响。
-
-Conda 安装如果本次升级改动了 `pyproject.toml`，请在激活环境后重新运行 `python -m pip install -e .`。
-
-然后重启 MCP 客户端（Claude Desktop、Claude Code、Cursor 等）；MCP server 是常驻进程，启动时加载代码，不会热重载。重启后可验证：
-
-```bash
-uv run forum-rag ingest-docs Documents
-# 预期：indexed_documents=74，且 doc_chunks 为非零
-```
-
-再从 MCP 客户端调用 `search_docs("neutralization")` 或 `get_doc("operators")`。若新工具仍不可见，优先检查客户端是否已重启，其次检查 `command` / `args` 是否指向正确的仓库目录。
+如果运行过独立语义检索实验，`search_semantic_forum` 和模型准备、建索引命令已不在当前接口中。改用 `search_forum_batch` 传入中英文查询；既有论坛 SQLite 不依赖实验模型文件。
 
 ## 自动化任务的进程保护
 
@@ -384,7 +376,9 @@ uv run python scripts/run_bounded_task.py \
 
 ## 当前范围与后续方向
 
-已实现：本地 JSON 解析、SQLite 原帖与 chunk 索引、Markdown 文档摄入、FTS5 + hybrid search、来源 manifest、知识页与来源绑定、typed graph、Wiki 导出、backlink boost 与 embedding cache。
+已实现：本地 JSON 解析、SQLite 原帖与 chunk 索引、Markdown 文档摄入、FTS5 词法检索、双语批量查询与可定位证据、来源 manifest、知识页与来源绑定、typed graph、Wiki 导出、backlink boost 与 embedding cache。
+
+已知限制：旧库中文 LIKE 回退仍可能全表扫描，冷请求或复杂查询可能超时；可选中文索引尚未证明整体质量收益，默认关闭。并发保护目前覆盖 MCP 批量检索和证据读取，不代表全部同步工具都有统一限流。
 
 暂未实现：真人标注的完整准确率评测、PDF/截图/音频/视频等多模态摄入、定时或 always-on ingestion、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
 
