@@ -162,3 +162,102 @@ def test_rollback_journal_uncommitted_writer_keeps_reader_snapshot(tmp_path, cou
         assert len(counted_queries) == before + 2
         writer.rollback()
         assert lookup(db) == ['old']
+
+
+def test_replacement_after_open_does_not_cache_old_rows_under_new_file(tmp_path, counted_queries, monkeypatch):
+    db = make_db(tmp_path / 'forum.sqlite3')
+    replacement = make_db(tmp_path / 'replacement.sqlite3', 'new')
+    original_connect = sqlite3.connect
+    replaced = False
+
+    def replace_after_open(*args, **kwargs):
+        nonlocal replaced
+        conn = original_connect(*args, **kwargs)
+        if not replaced:
+            # Force SQLite to load A before B is installed at the same path.
+            assert conn.execute('SELECT record_id FROM document_fts').fetchone()[0] == 'old'
+            os.replace(replacement, db)
+            replaced = True
+        return conn
+
+    monkeypatch.setattr(index.sqlite3, 'connect', replace_after_open)
+    assert lookup(db) == ['old']
+    assert lookup(db) == ['new']
+    before = len(counted_queries)
+    assert lookup(db) == ['new']
+    assert len(counted_queries) == before  # the unchanged B entry really hits
+
+
+def test_arbitrary_old_connection_without_open_anchor_never_uses_global_cache(tmp_path, counted_queries):
+    db = make_db(tmp_path / 'forum.sqlite3')
+    replacement = make_db(tmp_path / 'replacement.sqlite3', 'new')
+    with connection(db) as old:
+        assert old.execute('SELECT record_id FROM document_fts').fetchone()[0] == 'old'
+        os.replace(replacement, db)
+        assert index._cached_candidate_ids(old, 'needle', kind='forum_chunk', limit=10) == ['old']
+        assert_warm(db, counted_queries, 'new')
+        before = len(counted_queries)
+        assert index._cached_candidate_ids(old, 'needle', kind='forum_chunk', limit=10) == ['old']
+        assert len(counted_queries) == before + 1
+
+
+def test_symlink_retarget_after_open_does_not_cache_old_connection(tmp_path, counted_queries, monkeypatch):
+    first = make_db(tmp_path / 'a.sqlite3')
+    second = make_db(tmp_path / 'b.sqlite3', 'new')
+    link = tmp_path / 'current.sqlite3'
+    link.symlink_to(first.name)
+    replacement_link = tmp_path / 'next.sqlite3'
+    replacement_link.symlink_to(second.name)
+    original_connect = sqlite3.connect
+    replaced = False
+
+    def switch_after_open(*args, **kwargs):
+        nonlocal replaced
+        conn = original_connect(*args, **kwargs)
+        if not replaced:
+            assert conn.execute('SELECT record_id FROM document_fts').fetchone()[0] == 'old'
+            os.replace(replacement_link, link)
+            replaced = True
+        return conn
+
+    monkeypatch.setattr(index.sqlite3, 'connect', switch_after_open)
+    assert lookup(link) == ['old']
+    assert_warm(link, counted_queries, 'new')
+
+
+def test_replacement_before_connection_open_does_not_cache_until_next_lookup(tmp_path, counted_queries, monkeypatch):
+    db = make_db(tmp_path / 'forum.sqlite3')
+    replacement = make_db(tmp_path / 'replacement.sqlite3', 'new')
+    original_connect = sqlite3.connect
+    replaced = False
+
+    def replace_before_open(*args, **kwargs):
+        nonlocal replaced
+        if not replaced:
+            os.replace(replacement, db)
+            replaced = True
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(index.sqlite3, 'connect', replace_before_open)
+    assert lookup(db) == ['new']
+    assert_warm(db, counted_queries, 'new')
+
+
+def test_wal_created_during_open_bypasses_cache_for_that_connection(tmp_path, counted_queries, monkeypatch):
+    db = make_db(tmp_path / 'forum.sqlite3')
+    original_connect = sqlite3.connect
+    with closing(original_connect(db)) as writer:
+        changed = False
+
+        def enable_wal_before_open(*args, **kwargs):
+            nonlocal changed
+            if not changed:
+                assert writer.execute('PRAGMA journal_mode=WAL').fetchone()[0] == 'wal'
+                set_record(writer, 'new')
+                writer.commit()
+                changed = True
+            return original_connect(*args, **kwargs)
+
+        monkeypatch.setattr(index.sqlite3, 'connect', enable_wal_before_open)
+        assert lookup(db) == ['new']
+        assert_warm(db, counted_queries, 'new')

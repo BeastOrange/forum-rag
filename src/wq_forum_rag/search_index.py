@@ -21,15 +21,8 @@ _candidate_cache: OrderedDict[tuple, tuple[str, ...]] = OrderedDict()
 _candidate_lock = threading.RLock()
 
 
-def _candidate_state(conn: sqlite3.Connection):
-    # A caller's explicit read transaction may still see an older WAL snapshot.
-    # Never use a process-wide current-file cache for that transaction.
-    if conn.in_transaction:
-        return None
-    row = conn.execute('PRAGMA database_list').fetchone()
-    if not row or not row[2]:
-        return None
-    path = Path(row[2]).resolve()
+def _path_candidate_state(path: Path):
+    path = path.resolve()
     values = [str(path)]
     for suffix in ('', '-wal', '-journal'):
         try:
@@ -37,11 +30,20 @@ def _candidate_state(conn: sqlite3.Connection):
             values.append((stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
         except FileNotFoundError:
             values.append(None)
-    # A hot rollback journal can change the visible snapshot without rewriting
-    # the database itself. Disable caching while a nonempty journal exists.
-    if values[-1] is not None and values[-1][2]:
+    # A missing DB cannot anchor an open; a hot journal can hide a snapshot.
+    if values[1] is None or (values[-1] is not None and values[-1][2]):
         return None
     return tuple(values)
+
+
+def _candidate_state(conn: sqlite3.Connection):
+    # A caller's explicit read transaction may still see an older WAL snapshot.
+    if conn.in_transaction:
+        return None
+    row = conn.execute('PRAGMA database_list').fetchone()
+    if not row or not row[2]:
+        return None
+    return _path_candidate_state(Path(row[2]))
 
 
 def init_search_schema(conn: sqlite3.Connection) -> bool:
@@ -86,16 +88,20 @@ def fts_candidates(
     limit: int = 200,
     include_drafts: bool = False,
 ) -> list[str]:
+    opening_state = _path_candidate_state(Path(db_path))
     with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.row_factory = sqlite3.Row
-        return _cached_candidate_ids(conn, query, kind=kind, limit=limit, include_drafts=include_drafts)
+        return _cached_candidate_ids(conn, query, kind=kind, limit=limit,
+                                     include_drafts=include_drafts, opening_state=opening_state)
 
 
 def _cached_candidate_ids(conn: sqlite3.Connection, query: str, *, kind: str, limit: int,
-                          include_drafts: bool = False) -> list[str]:
+                          include_drafts: bool = False, opening_state=None) -> list[str]:
     # Only fts_candidates' freshly opened, privately owned connection uses this
     # cache. Arbitrary caller connections can hold implicit SELECT snapshots.
-    state = _candidate_state(conn)
+    state = _candidate_state(conn) if opening_state is not None else None
+    if state != opening_state:
+        state = None
     key = (state, query, kind, limit, include_drafts, os.environ.get("FORUM_RAG_CHINESE_INDEX"))
     if state is not None:
         with _candidate_lock:
