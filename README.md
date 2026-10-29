@@ -339,7 +339,7 @@ uv run python scripts/evaluate_task_evidence.py \
 
 ## 检查本地环境
 
-运行 `uv run forum-rag doctor --db .cache/forum.sqlite3` 可查看 Python、SQLite、MCP SDK、论坛表和 FTS 索引状态。此命令只读，不创建数据库、不下载模型，也不重建索引。输出为 JSON，附有需要手动执行的修复建议；`ready` 表示本地依赖和索引结构可用，不代表已经验证 MCP 客户端连接或检索准确度。
+运行 `uv run forum-rag doctor --db .cache/forum.sqlite3` 可查看 Python、SQLite、MCP SDK、论坛与文档来源、FTS 索引状态。此命令只读，不创建数据库、不下载模型，也不重建索引。输出为 JSON，附有需要手动执行的修复建议；`ready` 表示本地依赖及至少一种已配置来源的检索结构可用；未导入论坛不影响仅用官方文档。各来源的状态会分别列出，不代表已经验证 MCP 客户端连接或检索准确度。
 
 ## 维护已有安装
 
