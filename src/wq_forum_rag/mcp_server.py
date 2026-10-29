@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sqlite3
 from pathlib import Path
@@ -31,6 +30,23 @@ def _resolve_db_path(db: str | None) -> Path:
 
 def _busy_payload(exc: ForumDatabaseBusyError, **extra: Any) -> dict[str, Any]:
     return {**extra, **exc.payload}
+
+
+async def _read_response(retrieve, db_path: Path, value: str, *, error_fields: dict[str, Any], **options):
+    """Run a bounded read, preserving tool-specific identifiers on known errors."""
+    try:
+        result = await run_read(retrieve, db_path, value, **options)
+    except ReadBusy as exc:
+        return {"status": "busy", "db": str(db_path), **error_fields, "reason": str(exc)}
+    except TimeoutError as exc:
+        return {"status": "timeout", "db": str(db_path), **error_fields, "reason": str(exc)}
+    except sqlite3.OperationalError as exc:
+        try:
+            raise_if_database_locked(exc, db_path)
+        except ForumDatabaseBusyError as busy:
+            return _busy_payload(busy, db=str(db_path), **error_fields)
+        raise
+    return {"db": str(db_path), **result}
 
 
 def search_forum(query: str, db: str | None = None, top_k: int = 5) -> dict[str, Any]:
@@ -60,23 +76,11 @@ async def search_forum_batch(
         raise TypeError('compact must be a boolean')
     from .batch_search import search_forum_batch as retrieve
 
-    db_path = _resolve_db_path(db)
-    try:
-        result = await run_read(
-            retrieve, db_path, query, query_variants=query_variants, top_k=top_k,
-            evidence_chars=evidence_chars, max_evidence_chars=max_evidence_chars,
-            **({'compact': compact} if compact is not False else {}))
-    except ReadBusy as exc:
-        return {"status": "busy", "query": query, "db": str(db_path), "results": [], "reason": str(exc)}
-    except TimeoutError as exc:
-        return {"status": "timeout", "query": query, "db": str(db_path), "results": [], "reason": str(exc)}
-    except sqlite3.OperationalError as exc:
-        try:
-            raise_if_database_locked(exc, db_path)
-        except ForumDatabaseBusyError as busy:
-            return _busy_payload(busy, query=query, db=str(db_path), results=[])
-        raise
-    return {"db": str(db_path), **result}
+    return await _read_response(
+        retrieve, _resolve_db_path(db), query, error_fields={"query": query, "results": []},
+        query_variants=query_variants, top_k=top_k, evidence_chars=evidence_chars,
+        max_evidence_chars=max_evidence_chars,
+        **({'compact': compact} if compact is not False else {}))
 
 
 async def get_forum_evidence(
@@ -91,22 +95,10 @@ async def get_forum_evidence(
     """
     from .batch_search import get_forum_evidence as retrieve
 
-    db_path = _resolve_db_path(db)
-    try:
-        result = await run_read(
-            retrieve, db_path, chunk_id, before=before, after=after, max_chars=max_chars,
-            expected_content_hash=expected_content_hash)
-    except ReadBusy as exc:
-        return {"status": "busy", "chunk_id": chunk_id, "db": str(db_path), "evidence": [], "reason": str(exc)}
-    except TimeoutError as exc:
-        return {"status": "timeout", "chunk_id": chunk_id, "db": str(db_path), "evidence": [], "reason": str(exc)}
-    except sqlite3.OperationalError as exc:
-        try:
-            raise_if_database_locked(exc, db_path)
-        except ForumDatabaseBusyError as busy:
-            return _busy_payload(busy, chunk_id=chunk_id, db=str(db_path), evidence=[])
-        raise
-    return {"db": str(db_path), **result}
+    return await _read_response(
+        retrieve, _resolve_db_path(db), chunk_id, error_fields={"chunk_id": chunk_id, "evidence": []},
+        before=before, after=after, max_chars=max_chars,
+        expected_content_hash=expected_content_hash)
 
 
 def get_post(topic_id: str, db: str | None = None) -> dict[str, Any]:
