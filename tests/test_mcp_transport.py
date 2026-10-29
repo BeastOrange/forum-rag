@@ -25,7 +25,7 @@ def test_sdk2_tool_registration_keeps_public_arguments():
     schema = tools["search_forum_batch"].input_schema
     assert schema["required"] == ["query"]
     assert {"query", "query_variants", "db", "top_k", "evidence_chars",
-            "max_evidence_chars"} == set(schema["properties"])
+            "max_evidence_chars", "compact"} == set(schema["properties"])
     assert tools["get_forum_evidence"].input_schema["required"] == ["chunk_id"]
 
 
@@ -64,12 +64,13 @@ main()
                 await getattr(session, connect)()
                 assert len((await session.list_tools()).tools) == 22
                 result = await session.call_tool("search_forum_batch", {
-                    "query": "neutralization", "query_variants": ["中性化"],
+                    "query": "neutralization", "query_variants": ["中性化"], "compact": True,
                 })
                 assert not result.is_error
                 payload = result.structured_content
                 assert json.loads(result.content[0].text) == payload
                 assert {row["topic_id"] for row in payload["results"]} == {"1", "2"}
+                assert all("snippet" not in row for row in payload["results"])
                 anchor = payload["results"][0]["evidence"][0]
                 response = await session.call_tool("get_forum_evidence", {
                     "chunk_id": anchor["chunk_id"],

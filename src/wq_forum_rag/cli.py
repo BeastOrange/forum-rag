@@ -271,12 +271,14 @@ def search_batch_command(
     top_k: int = typer.Option(6, "--top-k", min=1, max=20),
     evidence_chars: int = typer.Option(600, "--evidence-chars", min=100, max=2000),
     max_evidence_chars: int = typer.Option(6000, "--max-evidence-chars", min=200, max=20000),
+    compact: bool = typer.Option(False, "--compact", help="Omit the duplicate snippet field"),
 ) -> None:
     """Batch local queries and return compact, traceable evidence without a model."""
     from .batch_search import search_forum_batch
     try:
         result = search_forum_batch(db_path, query, query_variants=query_variants, top_k=top_k,
-                                   evidence_chars=evidence_chars, max_evidence_chars=max_evidence_chars)
+                                   evidence_chars=evidence_chars, max_evidence_chars=max_evidence_chars,
+                                   **({'compact': compact} if compact else {}))
     except TimeoutError as exc:
         console.print_json(data={"status": "timeout", "query": query, "results": [], "reason": str(exc)})
         return

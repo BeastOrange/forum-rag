@@ -45,6 +45,7 @@ def search_forum(query: str, db: str | None = None, top_k: int = 5) -> dict[str,
 async def search_forum_batch(
     query: str, query_variants: list[str] | None = None, db: str | None = None,
     top_k: int = 6, evidence_chars: int = 600, max_evidence_chars: int = 6000,
+    compact: bool = False,
 ) -> dict[str, Any]:
     """Search local forum evidence in one call, without loading a local model.
 
@@ -55,13 +56,16 @@ async def search_forum_batch(
     Scores are retrieval ranks, not confidence. Use get_forum_evidence for more
     context around a returned chunk, or get_post when the full thread is needed.
     """
+    if type(compact) is not bool:
+        raise TypeError('compact must be a boolean')
     from .batch_search import search_forum_batch as retrieve
 
     db_path = _resolve_db_path(db)
     try:
         result = await run_read(
             retrieve, db_path, query, query_variants=query_variants, top_k=top_k,
-            evidence_chars=evidence_chars, max_evidence_chars=max_evidence_chars)
+            evidence_chars=evidence_chars, max_evidence_chars=max_evidence_chars,
+            **({'compact': compact} if compact is not False else {}))
     except ReadBusy as exc:
         return {"status": "busy", "query": query, "db": str(db_path), "results": [], "reason": str(exc)}
     except TimeoutError as exc:

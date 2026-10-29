@@ -112,6 +112,8 @@ uv run forum-rag show 12913566170391
 
 默认检索不加载本地模型，也无需安装模型依赖。中英文查询由调用方 AI 提供，可通过 `search_forum_batch` 一次提交。
 
+调用 `search_forum_batch(..., compact=True)` 或 CLI `search-batch --compact` 可省去与 `evidence[].excerpt` 重复的 `snippet`，保留证据文本、版本标识和坐标。默认响应保持兼容。MCP 批量搜索与证据读取共享两个工作名额，满载返回 `busy`；客户端取消后会通知后台查询，线程退出后才释放名额。取消为协作式，数据库锁等待等阻塞操作可能延迟退出。
+
 以下可选依赖仅保留给已有代码层 embedding 后端调用；安装后不会启用独立语义召回，也不会新增 MCP 工具：
 
 ```bash
@@ -266,7 +268,7 @@ Windows 下将可执行文件路径改为 `...\envs\forum-rag\Scripts\forum-rag-
 | 分组 | 工具 |
 | --- | --- |
 | 论坛检索 | `search_forum(query, db=None, top_k=5)`<br>`get_post(topic_id, db=None)`<br>`find_by_exact(value, db=None, community=None, top_k=5)`<br>`related_posts(topic_id, db=None, top_k=5)` |
-| 批量证据 | `search_forum_batch(query, query_variants=None, db=None, top_k=6, evidence_chars=600, max_evidence_chars=6000)`<br>`get_forum_evidence(chunk_id, db=None, before=1, after=1, max_chars=6000, expected_content_hash=None)` |
+| 批量证据 | `search_forum_batch(query, query_variants=None, db=None, top_k=6, evidence_chars=600, max_evidence_chars=6000, compact=False)`<br>`get_forum_evidence(chunk_id, db=None, before=1, after=1, max_chars=6000, expected_content_hash=None)` |
 | 官方文档 | `search_docs(query, db=None, top_k=5)`<br>`get_doc(slug, db=None)`<br>`ingest_docs(directory, db=None, rebuild=False, prune=True)` |
 | 来源管理 | `source_status(source, db=None)`<br>`source_ingest_plan(source, db=None, commit=False)` |
 | 知识层 | `build_evolution_context(query, db=None, top_k=5)`<br>`propose_knowledge_page(slug, title, summary, body, source_topic_ids, confidence, db=None, links=None, auto_publish=True, source_evidence=None)`<br>`search_knowledge(query, db=None, top_k=5, include_drafts=False)`<br>`get_knowledge_page(slug, db=None)`<br>`link_knowledge_pages(source_slug, target_slug, relation_type, db=None, weight=1.0, confidence=0.8)`<br>`lint_knowledge(db=None, slug=None)`<br>`publish_knowledge_page(slug, db=None)`<br>`graph_query(slug, db=None, depth=1, relation_type=None)`<br>`export_knowledge_wiki(db=None, output_dir=".cache/wiki", include_drafts=False)` |

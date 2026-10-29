@@ -113,7 +113,9 @@ _SELECT = '''SELECT c.chunk_id, c.topic_id, c.chunk_index, c.chunk_level, c.star
 
 
 def search_forum_batch(db_path, query: str, *, query_variants: list[str] | None = None,
-                       top_k=6, evidence_chars=600, max_evidence_chars=6000) -> dict:
+                       top_k=6, evidence_chars=600, max_evidence_chars=6000, compact: bool = False) -> dict:
+    if type(compact) is not bool:
+        raise TypeError('compact must be a boolean')
     query = _string('query', query)
     _integer('top_k', top_k, 1, 20)
     _integer('evidence_chars', evidence_chars, 100, 2000)
@@ -202,6 +204,8 @@ def search_forum_batch(db_path, query: str, *, query_variants: list[str] | None 
                         'score': data['score'], 'snippet': evidence['excerpt'],
                         'language': _language(row['title'], evidence['excerpt']),
                         'matched_queries': data['routes'], 'evidence': [evidence]})
+        if compact:
+            del results[-1]['snippet']
     used = sum(len(e['excerpt']) for hit in results for e in hit['evidence'])
     return {'query': query, 'executed_queries': routes, 'results': results,
             'language_groups': {lang: [r['topic_id'] for r in results if r['language'] == lang] for lang in ('zh', 'en', 'mixed', 'unknown')},
