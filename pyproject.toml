@@ -48,6 +48,3 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.ruff]
-extend-exclude = ["tests/test_alphamachine_*.py"]
