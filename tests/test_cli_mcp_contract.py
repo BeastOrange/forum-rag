@@ -803,3 +803,11 @@ def test_index_prune_protects_topics_referenced_by_knowledge_pages(
     finally:
         conn.close()
     assert topic_ids == {"t1", "t2"}
+
+
+def test_server_reports_package_version() -> None:
+    from wq_forum_rag import __version__, build_mcp_server
+
+    server = build_mcp_server()
+    assert server.version == __version__
+    assert __version__ == "0.2.0"

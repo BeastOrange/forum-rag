@@ -7,6 +7,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
+from ._version import __version__
 from .cli import DEFAULT_DB_PATH, ForumIndexService
 from .documents import DocumentStore, ingest_documents
 from .evolution import EvolutionService
@@ -554,7 +555,7 @@ def build_mcp_server(default_db: str | Path | None = None) -> MCPServer:
         os.environ.get("FORUM_RAG_DB") or os.environ.get("WQ_FORUM_RAG_DB")
     ):
         os.environ["FORUM_RAG_DB"] = str(default_db)
-    server = MCPServer("forum-rag")
+    server = MCPServer("forum-rag", version=__version__)
     server.tool()(search_forum)
     server.tool()(search_forum_batch)
     server.tool()(get_forum_evidence)
