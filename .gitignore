@@ -24,3 +24,4 @@ Documents/
 /docs/semantic-performance-verification.md
 /docs/model-portability-and-review.md
 tests/test_alphamachine_*.py
+GEMINI.md
