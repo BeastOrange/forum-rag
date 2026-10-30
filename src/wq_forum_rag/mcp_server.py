@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import functools
+import inspect
 import os
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from ._version import __version__
 from .cli import DEFAULT_DB_PATH, ForumIndexService
@@ -550,34 +553,70 @@ def ingest_docs(
     return {**result, "search_index": search_index}
 
 
+def _tool_errors(tool):
+    """Re-raise domain errors as ToolError so the client sees the reason.
+
+    Any other exception is collapsed by the MCP SDK into
+    "Error executing tool <name>", which hides why the call failed: a missing
+    knowledge page and a rejected review would look identical to the caller.
+    """
+
+    def readable(exc: Exception) -> ToolError:
+        if isinstance(exc, FileNotFoundError):
+            message = f"file not found: {exc.filename or exc}"
+        else:
+            message = str(exc) or type(exc).__name__
+        return ToolError(message)
+
+    if inspect.iscoroutinefunction(tool):
+
+        @functools.wraps(tool)
+        async def async_wrapper(*args, **kwargs):
+            try:
+                return await tool(*args, **kwargs)
+            except (ValueError, OSError) as exc:
+                raise readable(exc) from exc
+
+        return async_wrapper
+
+    @functools.wraps(tool)
+    def wrapper(*args, **kwargs):
+        try:
+            return tool(*args, **kwargs)
+        except (ValueError, OSError) as exc:
+            raise readable(exc) from exc
+
+    return wrapper
+
+
 def build_mcp_server(default_db: str | Path | None = None) -> MCPServer:
     if default_db and not (
         os.environ.get("FORUM_RAG_DB") or os.environ.get("WQ_FORUM_RAG_DB")
     ):
         os.environ["FORUM_RAG_DB"] = str(default_db)
     server = MCPServer("forum-rag", version=__version__)
-    server.tool()(search_forum)
-    server.tool()(search_forum_batch)
-    server.tool()(get_forum_evidence)
-    server.tool()(get_post)
-    server.tool()(find_by_exact)
-    server.tool()(related_posts)
-    server.tool()(source_status)
-    server.tool()(source_ingest_plan)
-    server.tool()(build_evolution_context)
-    server.tool()(propose_knowledge_page)
-    server.tool()(search_knowledge)
-    server.tool()(get_knowledge_page)
-    server.tool()(link_knowledge_pages)
-    server.tool()(lint_knowledge)
-    server.tool()(publish_knowledge_page)
-    server.tool()(review_knowledge_page)
-    server.tool()(graph_query)
-    server.tool()(export_knowledge_wiki)
-    server.tool()(rebuild_search_index)
-    server.tool()(search_docs)
-    server.tool()(get_doc)
-    server.tool()(ingest_docs)
+    server.tool()(_tool_errors(search_forum))
+    server.tool()(_tool_errors(search_forum_batch))
+    server.tool()(_tool_errors(get_forum_evidence))
+    server.tool()(_tool_errors(get_post))
+    server.tool()(_tool_errors(find_by_exact))
+    server.tool()(_tool_errors(related_posts))
+    server.tool()(_tool_errors(source_status))
+    server.tool()(_tool_errors(source_ingest_plan))
+    server.tool()(_tool_errors(build_evolution_context))
+    server.tool()(_tool_errors(propose_knowledge_page))
+    server.tool()(_tool_errors(search_knowledge))
+    server.tool()(_tool_errors(get_knowledge_page))
+    server.tool()(_tool_errors(link_knowledge_pages))
+    server.tool()(_tool_errors(lint_knowledge))
+    server.tool()(_tool_errors(publish_knowledge_page))
+    server.tool()(_tool_errors(review_knowledge_page))
+    server.tool()(_tool_errors(graph_query))
+    server.tool()(_tool_errors(export_knowledge_wiki))
+    server.tool()(_tool_errors(rebuild_search_index))
+    server.tool()(_tool_errors(search_docs))
+    server.tool()(_tool_errors(get_doc))
+    server.tool()(_tool_errors(ingest_docs))
     return server
 
 

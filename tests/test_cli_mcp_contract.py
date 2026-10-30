@@ -4,6 +4,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from typer.testing import CliRunner
 
 from wq_forum_rag.cli import app
@@ -811,3 +813,24 @@ def test_server_reports_package_version() -> None:
     server = build_mcp_server()
     assert server.version == __version__
     assert __version__ == "0.2.0"
+
+
+def test_domain_errors_surface_their_reason(tmp_path: Path) -> None:
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    from wq_forum_rag.mcp_server import (
+        _tool_errors,
+        review_knowledge_page,
+        source_status,
+    )
+
+    db_path = str(tmp_path / "forum.sqlite3")
+    with pytest.raises(ToolError) as missing:
+        _tool_errors(review_knowledge_page)(
+            slug="missing-page", action="reviewed", note="check", db=db_path
+        )
+    assert "knowledge page does not exist" == str(missing.value)
+
+    with pytest.raises(ToolError) as bad_path:
+        _tool_errors(source_status)(source=str(tmp_path / "nope.json"), db=db_path)
+    assert str(bad_path.value).startswith("file not found:")
