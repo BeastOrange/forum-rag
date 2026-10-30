@@ -1,46 +1,56 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc">
-  <title id="title">forum-rag — a local evidence layer for quantitative research</title>
-  <desc id="desc">An editorial research card showing forum-rag as a local workflow: curated research documents and a user's forum export become a SQLite and FTS5 evidence layer for CLI and MCP clients.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-labelledby="title desc">
+  <title id="title">forum-rag — offline evidence retrieval over your own forum export</title>
+  <desc id="desc">Left: the forum-rag wordmark, its one-line promise, and three facts (Python 3.11+, SQLite FTS5, 22 MCP tools). Right: a dark evidence card showing a real search_forum_batch call — the query reduce turnover, its variant lower turnover, the returned chunk id, a verbatim excerpt, and the character offsets that locate it in the source post.</desc>
 
-  <!-- Warm archival-paper background -->
-  <rect width="1200" height="540" rx="30" fill="#f6f0e5"/>
-  <rect x="1" y="1" width="1198" height="538" rx="29" fill="none" stroke="#d8cbb8" stroke-width="2"/>
-  <path d="M58 92H688M58 457H688" stroke="#d6c6b1" stroke-width="2"/>
-  <path d="M58 108V441" stroke="#ef5b4a" stroke-width="8" stroke-linecap="round"/>
+  <rect width="1200" height="460" rx="28" fill="#f7f1e6"/>
+  <rect x="1" y="1" width="1198" height="458" rx="27" fill="none" stroke="#e0d3bf" stroke-width="1.5"/>
 
-  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-    <!-- Editorial title block -->
-    <text x="88" y="114" fill="#4255c8" font-size="20" font-weight="750" letter-spacing="2.7">OFFLINE RESEARCH WORKFLOW</text>
-    <text x="88" y="208" fill="#16222d" font-size="73" font-weight="760" letter-spacing="-2.8">forum-rag</text>
-    <text x="88" y="272" fill="#35424c" font-size="29" font-weight="500">Research documents, forum exports,</text>
-    <text x="88" y="312" fill="#35424c" font-size="29" font-weight="500">and AI workflows in one local layer.</text>
+  <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
+    <text x="64" y="78" fill="#4255c8" font-size="18" font-weight="700" letter-spacing="2.4">LOCAL EVIDENCE LAYER · V0.2.0</text>
+    <path d="M64 96H636" stroke="#d8c9b3" stroke-width="1.5"/>
 
-    <g transform="translate(88 354)">
-      <rect width="214" height="43" rx="21.5" fill="#16222d"/>
-      <text x="20" y="29" fill="#f6f0e5" font-size="18" font-weight="700">PYTHON ≥ 3.11</text>
-      <rect x="228" width="160" height="43" rx="21.5" fill="#4255c8"/>
-      <text x="249" y="29" fill="#ffffff" font-size="18" font-weight="700">CLI + MCP</text>
+    <text x="64" y="176" fill="#16222d" font-size="76" font-weight="700" letter-spacing="-3">forum-rag</text>
+
+    <text x="64" y="230" fill="#35424c" font-size="26">Offline retrieval over your own forum export.</text>
+    <text x="64" y="268" fill="#35424c" font-size="26">Every hit returns verbatim text with offsets.</text>
+
+    <g transform="translate(64 306)">
+      <rect width="173" height="40" rx="20" fill="#16222d"/>
+      <text x="84.5" y="26" text-anchor="middle" fill="#f7f1e6" font-size="18" font-weight="600">Python ≥ 3.11</text>
+      <rect x="185" width="180" height="40" rx="20" fill="none" stroke="#b9a88f" stroke-width="1.5"/>
+      <text x="274.3" y="26" text-anchor="middle" fill="#35424c" font-size="18" font-weight="600">SQLite · FTS5</text>
+      <rect x="377" width="175" height="40" rx="20" fill="none" stroke="#b9a88f" stroke-width="1.5"/>
+      <text x="463.8" y="26" text-anchor="middle" fill="#35424c" font-size="18" font-weight="600">22 MCP tools</text>
     </g>
 
-    <text x="88" y="433" fill="#69747c" font-size="20" font-weight="600">74 curated Markdown documents are included.</text>
+    <text x="64" y="404" fill="#6b7780" font-size="18">No model download. No cloud calls. One local file.</text>
+  </g>
 
-    <!-- Right-side evidence dossier -->
-    <rect x="734" y="52" width="408" height="436" rx="24" fill="#4255c8"/>
-    <path d="M766 116H1110M766 250H1110M766 384H1110" stroke="#7181df" stroke-width="2"/>
-    <text x="766" y="92" fill="#f6f0e5" font-size="18" font-weight="750" letter-spacing="2.4">EVIDENCE DOSSIER</text>
+  <g id="evidence-card" transform="translate(700 44)">
+    <rect width="436" height="372" rx="18" fill="#16222d"/>
 
-    <!-- Source 01 -->
-    <text x="766" y="155" fill="#ffab9e" font-size="17" font-weight="750" letter-spacing="1.8">01 / DOCUMENTS</text>
-    <text x="766" y="196" fill="#ffffff" font-size="29" font-weight="720">Official research guides</text>
-    <text x="766" y="224" fill="#dce2ff" font-size="20">74 tracked Markdown files</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <text x="28" y="44" fill="#8fa0ff" font-size="18">search_forum_batch</text>
+      <text x="408" y="44" fill="#6f7d89" font-size="18" text-anchor="end">top_k 6</text>
+      <path d="M28 60H408" stroke="#2f3d4a" stroke-width="1.5"/>
 
-    <!-- Source 02 -->
-    <text x="766" y="289" fill="#ffab9e" font-size="17" font-weight="750" letter-spacing="1.8">02 / FORUM EXPORT</text>
-    <text x="766" y="330" fill="#ffffff" font-size="29" font-weight="720">Your JSON archive</text>
-    <text x="766" y="358" fill="#dce2ff" font-size="20">Indexed locally, under your control</text>
+      <text x="28" y="96" fill="#e2543f" font-size="17" font-weight="700" letter-spacing="1.6">QUERY</text>
+      <text x="28" y="168" fill="#e2543f" font-size="17" font-weight="700" letter-spacing="1.6">VARIANT</text>
+      <text x="28" y="250" fill="#e2543f" font-size="17" font-weight="700" letter-spacing="1.6">EVIDENCE</text>
+    </g>
 
-    <!-- Result -->
-    <text x="766" y="423" fill="#ffab9e" font-size="17" font-weight="750" letter-spacing="1.8">03 / EVIDENCE LAYER</text>
-    <text x="766" y="458" fill="#ffffff" font-size="24" font-weight="720">SQLite · FTS5 · CLI · MCP</text>
+    <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
+      <text x="28" y="130" fill="#f7f1e6" font-size="22">reduce turnover</text>
+      <text x="28" y="202" fill="#f7f1e6" font-size="22">lower turnover</text>
+    </g>
+
+    <path d="M28 222H408" stroke="#2f3d4a" stroke-width="1.5"/>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <text x="28" y="278" fill="#cdd6e0" font-size="20">chunk 4120…:chunk:0</text>
+      <text x="28" y="312" fill="#8b98a4" font-size="19">“…verbatim excerpt…”</text>
+      <text x="28" y="352" fill="#e2543f" font-size="20">[1204–1231]</text>
+      <text x="188" y="352" fill="#8b98a4" font-size="18">hash match</text>
+    </g>
   </g>
 </svg>
