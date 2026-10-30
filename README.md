@@ -67,8 +67,9 @@ uv sync
 # 项目要求 Python >= 3.11；没有合适版本时先执行：
 # uv python install 3.11
 
-# 必跑：将仓库内 74 篇官方 Markdown 文档写入默认 SQLite 索引
-uv run forum-rag ingest-docs Documents
+# 必跑：将你自己的 Markdown 文档目录写入默认 SQLite 索引
+# 平台官方文档不随仓库分发，先把导出的 .md 放到任意目录，例如 ./Documents
+uv run forum-rag ingest-docs /path/to/your/markdown-docs
 ```
 
 #### 使用 Conda
@@ -80,8 +81,8 @@ conda create -n forum-rag python=3.11 pip -y
 conda activate forum-rag
 python -m pip install -e .
 
-# 必跑：将仓库内 74 篇官方 Markdown 文档写入默认 SQLite 索引
-forum-rag ingest-docs Documents
+# 必跑：将你自己的 Markdown 文档目录写入默认 SQLite 索引
+forum-rag ingest-docs /path/to/your/markdown-docs
 ```
 
 后续示例以 `uv` 展示。Conda 环境中，将 `uv run forum-rag <command>` 替换为 `forum-rag <command>`，将 `uv run forum-rag-mcp` 替换为 `forum-rag-mcp`。
@@ -132,17 +133,17 @@ python -m pip install -e ".[local-embeddings]"
 | 内容 | 是否随仓库提供 | 用途与获取方式 |
 | --- | --- | --- |
 | 代码、测试、`pyproject.toml` | ✅ | `git clone` 即可获得。 |
-| [`Documents/`](Documents/) 中 74 篇官方 Markdown 文档 | ✅ | `git clone` 后执行 `ingest-docs Documents`。 |
+| 你自己的 Markdown 文档目录（示例为 `Documents/`） | ❌ | 由你自行准备并保管，执行 `ingest-docs <目录>` 摄入。平台官方文档不随仓库分发。 |
 | 论坛 SQLite（例如 `.cache/forum.sqlite3`） | ❌ | 由每位用户使用自己的平台帐号导出 JSON 后，在本地运行 `refresh` / `index` 建立。 |
 
-仅使用自带官方文档时，源码即可开始；检索个人论坛内容时，再提供自己的论坛 JSON 或既有 SQLite。`Documents/` 随源码分发，首次使用需执行 `ingest-docs Documents`。
+最小交付物是：**本仓库源码 + 你自己的 Markdown 文档目录 + 你自己的论坛 JSON**。仓库不附带平台官方文档，`Documents/` 已被 Git 忽略，首次使用需执行 `ingest-docs <你的目录>`。
 
 如果你选择私下共享已经构建好的 SQLite，对方可以跳过论坛离线索引，只需将 `FORUM_RAG_DB` 指向该文件。请先自行评估相关平台条款及数据分享风险；该数据库默认不应提交到 Git。
 
 ## 检索工作流
 
 ```text
-官方 Documents/ ─┐
+自备 Markdown 目录 ─┐
                   ├─> SQLite / FTS5 候选 ─> 词法排序 / 多查询 RRF ─> CLI / MCP
 个人论坛 JSON ───┘                                                │
                                                                    └─> 可追溯知识页与 Markdown Wiki
@@ -179,7 +180,7 @@ uv run forum-rag index \
 | 检查环境与索引 | `uv run forum-rag doctor --db .cache/forum.sqlite3` |
 | 搜索 / 查看论坛 | `uv run forum-rag search "query"` · `uv run forum-rag show TOPIC_ID` |
 | 搜索 / 查看官方文档 | `uv run forum-rag search-docs "query"` · `uv run forum-rag show-doc SLUG` |
-| 文档入库 | `uv run forum-rag ingest-docs Documents` |
+| 文档入库 | `uv run forum-rag ingest-docs <目录>` |
 | 重建 FTS5 索引 | `uv run forum-rag search-reindex` |
 | 查看论坛来源差异 | `uv run forum-rag source-status ./notes` · `uv run forum-rag source-ingest-plan ./notes --commit` |
 | 使用知识层 | `uv run forum-rag <command>`，其中 `<command>` 为 `evolve-context`、`knowledge-search`、`knowledge-show`、`knowledge-lint`、`knowledge-graph` 或 `knowledge-export` |
@@ -205,7 +206,7 @@ uv run forum-rag search-reindex --db /path/to/forum.sqlite3 --chinese
 `ingest-docs` 是增量操作：相同内容按 `content_hash` 跳过，默认会 prune 数据库中目录已不存在的文档。
 
 ```bash
-uv run forum-rag ingest-docs Documents
+uv run forum-rag ingest-docs /path/to/your/markdown-docs
 # 可选：
 #   --rebuild       强制全清重建
 #   --no-prune      保留 DB 中已不存在于目录的文档
@@ -352,7 +353,7 @@ uv sync --locked
 uv run forum-rag doctor --db .cache/forum.sqlite3
 ```
 
-Conda 环境中执行 `python -m pip install -e .`，再运行 `forum-rag doctor --db .cache/forum.sqlite3`。只有需要新增或更新仓库文档时，才另外执行 `ingest-docs Documents`；已有论坛数据不需要重新 `refresh`，也不要删除数据库。如果索引还含其他目录导入的文档，摄入时可加 `--no-prune`，保留目录外文档。
+Conda 环境中执行 `python -m pip install -e .`，再运行 `forum-rag doctor --db .cache/forum.sqlite3`。只有需要新增或更新仓库文档时，才另外执行 `ingest-docs <目录>`；已有论坛数据不需要重新 `refresh`，也不要删除数据库。如果索引还含其他目录导入的文档，摄入时可加 `--no-prune`，保留目录外文档。
 
 然后重启或重新连接 MCP 客户端。服务进程不会热重载代码；重启后应发现 22 个工具。已摄入官方文档时，可调用 `search_docs("neutralization")`、`get_doc("operators")`；有论坛数据时再验证 `search_forum_batch`。工具不可见时，检查客户端是否仍指向旧环境或错误的仓库目录。
 

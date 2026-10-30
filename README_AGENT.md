@@ -26,7 +26,7 @@ Choose one environment manager.
 ```bash
 uv sync
 uv run forum-rag --help
-uv run forum-rag ingest-docs Documents   # ingest the 74 official Markdown docs shipped in repo
+uv run forum-rag ingest-docs /path/to/your/markdown-docs   # ingest the user's own Markdown docs (not shipped in repo)
 ```
 
 ### Use Conda
@@ -38,7 +38,7 @@ conda create -n forum-rag python=3.11 pip -y
 conda activate forum-rag
 python -m pip install -e .
 forum-rag --help
-forum-rag ingest-docs Documents
+forum-rag ingest-docs /path/to/your/markdown-docs
 ```
 
 After activation, replace every `uv run forum-rag <command>` below with `forum-rag <command>`, and replace `uv run forum-rag-mcp` with `forum-rag-mcp`. Do not tell a Conda user to install `uv` just to run this project.
@@ -79,7 +79,7 @@ For Conda, activate the chosen environment, run `python -m pip install -e .`, an
 
 This upgrade uses the official MCP Python SDK 2.x; the separate `fastmcp` package is not required. Existing stdio commands and tool arguments remain compatible. Batch search additionally accepts optional `compact=True`.
 
-Do not delete or rebuild an existing forum index for a code upgrade. Only run `ingest-docs Documents` when the user wants to add or update shipped documentation. Its default pruning removes documents absent from that directory; use `--no-prune` if other imported documents must be retained. Do not re-run forum `refresh` unless source data actually needs updating.
+Do not delete or rebuild an existing forum index for a code upgrade. Only run `ingest-docs <dir>` when the user wants to add or update their own Markdown documentation. Its default pruning removes documents absent from that directory; use `--no-prune` if other imported documents must be retained. Do not re-run forum `refresh` unless source data actually needs updating.
 
 Restart or reconnect the MCP client after updating code/dependencies. The server does not hot-reload. Verify that 22 tools are visible; for an index that already contains official documents, `search_docs("neutralization")` and `get_doc("operators")` should work. Without imported documents, empty document results are expected and do not prove a transport failure. `doctor` checks local structure, not client connectivity or answer accuracy.
 
@@ -136,7 +136,7 @@ The SQLite database contains **three independent layers**. Keep them straight:
 | --- | --- | --- | --- | --- |
 | Raw forum evidence | `topics` / `chunks` | `search_forum` | Medium (user discussion) | Platform JSON export |
 | Compiled knowledge | `knowledge_pages` / `knowledge_sources` / `knowledge_links` | `search_knowledge` | Medium (AI-distilled, must cite sources) | Produced by you via `propose_knowledge_page` |
-| Official docs | `documents` / `doc_chunks` | `search_docs` | High (authoritative reference) | Markdown files in `Documents/` committed to repo |
+| Official docs | `documents` / `doc_chunks` | `search_docs` | High (authoritative reference) | Markdown files in the user's own docs directory, not committed |
 
 Routing rules:
 
@@ -204,7 +204,7 @@ Use these tools based on the user intent:
 - `link_knowledge_pages(source_slug, target_slug, relation_type, ...)`: add graph relations between knowledge pages.
 - `graph_query(slug, depth=1, relation_type=None)`: inspect related knowledge and backlinks.
 - `export_knowledge_wiki(output_dir=".cache/wiki")`: export Markdown pages for human review.
-- `ingest_docs(directory, rebuild=False, prune=True)`: re-ingest the `Documents/` markdown directory after the user adds or updates `.md` files. Idempotent — unchanged files are skipped per content hash.
+- `ingest_docs(directory, rebuild=False, prune=True)`: re-ingest the user's own Markdown directory after the user adds or updates `.md` files. Idempotent — unchanged files are skipped per content hash.
 - `source_status(source)`: dry-run scan for an external text or Markdown source directory.
 - `source_ingest_plan(source, commit=False)`: inspect or commit a text/Markdown source manifest delta.
 - `rebuild_search_index()`: refresh FTS after bulk indexing or many knowledge-page changes.

@@ -47,6 +47,15 @@ publish_knowledge_page(slug)
 - 补充说明：默认 `search_forum` 排序仍使用**确定性哈希特征**（token 哈希向量 + 余弦，权重 dense 0.55 / lexical 0.45）。这是纯 CPU 的特征计算，不加载任何模型权重，与已移除的语义检索不是一回事。
 - 跨语言检索改由调用方 AI 提供中英文查询变体完成，工具不自动翻译。
 
+### 4. 仓库不再附带平台官方文档
+
+`Documents/` 中 74 篇平台官方 Markdown 文档已从仓库移除，不再随源码或源码包分发；历史提交同步清理。
+
+- **索引不受影响**：`documents` / `doc_chunks` 表与对应 FTS 记录保持原样，已建立的文档检索照常工作，无需重建。
+- **安装步骤变化**：`ingest-docs` 需指向你自己的 Markdown 目录，`ingest-docs Documents` 只在本地仍保留该目录时可用。
+- **注意 prune**：`ingest-docs` 默认会删除数据库中「目录里已不存在」的文档。若你指向的新目录不含原有文档，请加 `--no-prune`，否则这些文档记录会被清理。
+- 代码与测试不依赖该目录：`src/`、`tests/`、`scripts/` 均无硬编码路径，测试使用临时目录。
+
 ---
 
 ## 新增能力
@@ -212,6 +221,7 @@ uv run forum-rag doctor --db /path/to/forum.sqlite3
 2. `doctor` 报告 `degraded` 时按输出建议处理；缺失 FTS 需重建索引。
 3. 若使用中文索引：先 `search-reindex --chinese`，再设置 `FORUM_RAG_CHINESE_INDEX=1`。
 4. 已有知识页若未经审核版本，将不再进入默认可信检索——需按新流程补充审核。
+5. 仓库不再附带官方文档：若你仍需要文档检索，把 `.md` 放到本地任意目录后执行 `ingest-docs <目录>`；要保留数据库中已有文档记录时加 `--no-prune`。
 
 ## 回退与数据边界
 
