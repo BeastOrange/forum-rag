@@ -29,6 +29,24 @@ wq-forum-rag-mcp = "wq_forum_rag.mcp_server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/wq_forum_rag"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+  "src",
+  "tests",
+  "scripts",
+  "docs",
+  "README.md",
+  "README_AGENT.md",
+  "GEMINI.md",
+  "pyproject.toml",
+  "uv.lock",
+  "assets",
+]
+exclude = [
+  "tests/test_alphamachine_*",
+  "**/__pycache__",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

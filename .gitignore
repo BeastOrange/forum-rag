@@ -1,5 +1,7 @@
 .cache/
 .gemini/
+.claude/
+.workbuddy-ai/
 .pytest_cache/
 .venv/
 __pycache__/
@@ -12,10 +14,12 @@ build/
 WQPCommunityState_*.json
 *.pdf
 .DS_Store
-
-# Local evaluation output and implementation notes
+20261027_data/
+docs.pre-forum-rag-20261027
+Documents/
 /docs/evaluation/
 /docs/superpowers/
 /docs/search-quality-verification.md
 /docs/semantic-performance-verification.md
 /docs/model-portability-and-review.md
+tests/test_alphamachine_*.py
