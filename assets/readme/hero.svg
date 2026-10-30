@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-labelledby="title desc">
   <title id="title">forum-rag — offline evidence retrieval over your own forum export</title>
-  <desc id="desc">Left: the forum-rag wordmark, its one-line promise, and three facts (Python 3.11+, SQLite FTS5, 22 MCP tools). Right: a dark evidence card showing a real search_forum_batch call — the query reduce turnover, its variant lower turnover, the returned chunk id, a verbatim excerpt, and the character offsets that locate it in the source post.</desc>
+  <desc id="desc">Left: the forum-rag wordmark, its promise in two lines, and three facts (Python 3.11+, SQLite FTS5, 22 MCP tools). Right: a dark evidence card showing a real search_forum_batch call — the query reduce turnover, its variant lower turnover, the returned chunk id, a verbatim excerpt, and the character offsets that locate it in the source post.</desc>
 
   <rect width="1200" height="460" rx="28" fill="#f7f1e6"/>
   <rect x="1" y="1" width="1198" height="458" rx="27" fill="none" stroke="#e0d3bf" stroke-width="1.5"/>
