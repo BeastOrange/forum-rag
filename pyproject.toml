@@ -32,7 +32,6 @@ packages = ["src/wq_forum_rag"]
 [tool.hatch.build.targets.sdist]
 include = [
   "src",
-  "tests",
   "scripts",
   "docs",
   "README.md",
@@ -43,7 +42,7 @@ include = [
   "assets",
 ]
 exclude = [
-  "tests/test_alphamachine_*",
+  "tests",
   "**/__pycache__",
 ]
 
