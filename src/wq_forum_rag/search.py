@@ -1,7 +1,3 @@
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import math
