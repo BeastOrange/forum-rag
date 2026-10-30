@@ -261,3 +261,67 @@ def test_reason_arriving_between_pipe_check_and_poll_is_not_lost(tmp_path, monke
     assert runner.run([sys.executable, '-B', '-c', 'import time;time.sleep(10)'],
                       lease_file=lease, timeout=.3 if reason == 'timeout' else 3,
                       lease_ttl=3 if reason == 'timeout' else .3, grace=.1) == expected
+
+
+def test_transient_group_probe_permission_error_is_rechecked(monkeypatch):
+    now = [0.0]
+    probes = [PermissionError(1, 'transient'), ProcessLookupError(3, 'gone')]
+    signals = []
+    def killpg(pgid, sig):
+        assert pgid == 123456
+        if sig == 0:
+            raise probes.pop(0) if len(probes) > 1 else probes[0]
+        signals.append(sig)
+    monkeypatch.setattr(runner.os, 'killpg', killpg)
+    monkeypatch.setattr(runner.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(runner.time, 'sleep', lambda seconds: now.__setitem__(0, now[0] + seconds))
+    runner._stop_group(123456, .03)
+    assert signals == [signal.SIGTERM]
+    assert len(probes) == 1 and isinstance(probes[0], ProcessLookupError)
+    assert now[0] <= .08
+
+
+def test_persistent_group_probe_permission_error_is_bounded_and_propagated(monkeypatch):
+    now = [0.0]
+    error = PermissionError(1, 'permission denied')
+    attempts = []
+    def killpg(pgid, sig):
+        if sig == 0:
+            attempts.append(now[0])
+            raise error
+    monkeypatch.setattr(runner.os, 'killpg', killpg)
+    monkeypatch.setattr(runner.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(runner.time, 'sleep', lambda seconds: now.__setitem__(0, now[0] + seconds))
+    with pytest.raises(PermissionError) as raised:
+        runner._stop_group(123456, .03)
+    assert raised.value is error
+    assert len(attempts) > 1
+    assert now[0] <= .08
+
+
+def test_signal_permission_error_is_not_retried_or_suppressed(monkeypatch):
+    error = PermissionError(1, 'signal denied')
+    def killpg(pgid, sig):
+        raise error
+    monkeypatch.setattr(runner.os, 'killpg', killpg)
+    with pytest.raises(PermissionError) as raised:
+        runner._stop_group(123456, .03)
+    assert raised.value is error
+
+
+def test_late_probe_permission_error_shares_cleanup_deadline(monkeypatch):
+    now = [0.0]
+    error = PermissionError(1, 'late permission denied')
+    attempts = []
+    def killpg(pgid, sig):
+        if sig == 0 and now[0] >= .03:
+            attempts.append(now[0])
+            raise error
+    monkeypatch.setattr(runner.os, 'killpg', killpg)
+    monkeypatch.setattr(runner.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(runner.time, 'sleep', lambda seconds: now.__setitem__(0, now[0] + seconds))
+    with pytest.raises(PermissionError) as raised:
+        runner._stop_group(123456, .03)
+    assert raised.value is error
+    assert len(attempts) > 1
+    assert .03 <= attempts[0] <= now[0] <= .08

@@ -13,12 +13,21 @@ import sys
 import time
 
 
-def _group_exists(pgid: int) -> bool:
-    try:
-        os.killpg(pgid, 0)
-        return True
-    except ProcessLookupError:
-        return False
+def _group_exists(pgid: int, deadline: float) -> bool:
+    # macOS can report EPERM briefly while the last group member exits.
+    # A persistent permission error remains an error, never proof of absence.
+    retry_deadline = min(deadline, time.monotonic() + 0.05)
+    while True:
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            remaining = retry_deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            time.sleep(min(0.005, remaining))
 
 
 def _stop_group(pgid: int, grace: float, process=None) -> None:
@@ -31,15 +40,16 @@ def _stop_group(pgid: int, grace: float, process=None) -> None:
     except ProcessLookupError:
         pass
     deadline = time.monotonic() + grace
+    cleanup_deadline = deadline + 0.05
     while time.monotonic() < deadline:
         if process is not None:
             process.poll()
-        if not _group_exists(pgid):
+        if not _group_exists(pgid, cleanup_deadline):
             break
-        time.sleep(0.02)
+        time.sleep(max(0, min(0.02, deadline - time.monotonic())))
     if process is not None:
         process.poll()
-    if _group_exists(pgid):
+    if _group_exists(pgid, cleanup_deadline):
         try:
             os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
