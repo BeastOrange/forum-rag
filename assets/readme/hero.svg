@@ -1,56 +1,57 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="title desc">
   <title id="title">forum-rag — offline evidence retrieval over your own forum export</title>
-  <desc id="desc">Left: the forum-rag wordmark, its promise in two lines, and three facts (Python 3.11+, SQLite FTS5, 22 MCP tools). Right: a dark evidence card showing a real search_forum_batch call — the query reduce turnover, its variant lower turnover, the returned chunk id, a verbatim excerpt, and the character offsets that locate it in the source post.</desc>
+  <desc id="desc">A cold monochrome spec sheet. Left: the forum-rag wordmark, a two-line promise, and a two-row spec list for runtime and storage. Right: a flat white panel showing one search_forum_batch call — the query and its variant, then two ranked results with their chunk ids and the character offsets that locate each excerpt, the offsets in a slate accent.</desc>
 
-  <rect width="1200" height="460" rx="28" fill="#f7f1e6"/>
-  <rect x="1" y="1" width="1198" height="458" rx="27" fill="none" stroke="#e0d3bf" stroke-width="1.5"/>
+  <rect width="1200" height="480" rx="8" fill="#f4f6f7"/>
+  <rect x="1" y="1" width="1198" height="478" rx="7" fill="none" stroke="#e3e8eb" stroke-width="1"/>
 
-  <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
-    <text x="64" y="78" fill="#4255c8" font-size="18" font-weight="700" letter-spacing="2.4">LOCAL EVIDENCE LAYER · V0.2.0</text>
-    <path d="M64 96H636" stroke="#d8c9b3" stroke-width="1.5"/>
+  <text x="64" y="88" fill="#7a858f" font-size="16" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="2.6">LOCAL EVIDENCE LAYER — V0.2.0</text>
+  <path d="M64 110H1136" stroke="#d9dfe3" stroke-width="1"/>
 
-    <text x="64" y="176" fill="#16222d" font-size="76" font-weight="700" letter-spacing="-3">forum-rag</text>
-
-    <text x="64" y="230" fill="#35424c" font-size="26">Offline retrieval over your own forum export.</text>
-    <text x="64" y="268" fill="#35424c" font-size="26">Every hit returns verbatim text with offsets.</text>
-
-    <g transform="translate(64 306)">
-      <rect width="173" height="40" rx="20" fill="#16222d"/>
-      <text x="84.5" y="26" text-anchor="middle" fill="#f7f1e6" font-size="18" font-weight="600">Python ≥ 3.11</text>
-      <rect x="185" width="180" height="40" rx="20" fill="none" stroke="#b9a88f" stroke-width="1.5"/>
-      <text x="274.3" y="26" text-anchor="middle" fill="#35424c" font-size="18" font-weight="600">SQLite · FTS5</text>
-      <rect x="377" width="175" height="40" rx="20" fill="none" stroke="#b9a88f" stroke-width="1.5"/>
-      <text x="463.8" y="26" text-anchor="middle" fill="#35424c" font-size="18" font-weight="600">22 MCP tools</text>
-    </g>
-
-    <text x="64" y="404" fill="#6b7780" font-size="18">No model download. No cloud calls. One local file.</text>
+  <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="64" y="212" fill="#0f1316" font-size="80" font-weight="400" letter-spacing="-2.8">forum-rag</text>
+    <text x="64" y="266" fill="#4a535b" font-size="23">Offline retrieval over your own forum export.</text>
+    <text x="64" y="298" fill="#4a535b" font-size="23">Every hit returns verbatim text with offsets.</text>
   </g>
 
-  <g id="evidence-card" transform="translate(700 44)">
-    <rect width="436" height="372" rx="18" fill="#16222d"/>
+  <g id="spec-list" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <path d="M64 340H560" stroke="#dde3e7" stroke-width="1"/>
+    <text x="64" y="374" fill="#8b959e" font-size="16">RUNTIME</text>
+    <text x="200" y="374" fill="#0f1316" font-size="18">Python 3.11+</text>
+    <path d="M64 392H560" stroke="#dde3e7" stroke-width="1"/>
+    <text x="64" y="426" fill="#8b959e" font-size="16">STORAGE</text>
+    <text x="200" y="426" fill="#0f1316" font-size="18">SQLite · FTS5 · 22 MCP tools</text>
+  </g>
+
+  <path d="M612 132V426" stroke="#dde3e7" stroke-width="1"/>
+
+  <g id="evidence-panel" transform="translate(640 132)">
+    <rect width="496" height="294" rx="4" fill="#ffffff" stroke="#dfe4e7" stroke-width="1"/>
 
     <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
-      <text x="28" y="44" fill="#8fa0ff" font-size="18">search_forum_batch</text>
-      <text x="408" y="44" fill="#6f7d89" font-size="18" text-anchor="end">top_k 6</text>
-      <path d="M28 60H408" stroke="#2f3d4a" stroke-width="1.5"/>
+      <text x="28" y="40" fill="#0f1316" font-size="18">search_forum_batch</text>
+      <text x="468" y="40" fill="#7a858f" font-size="16" text-anchor="end">top_k 6</text>
+      <path d="M28 58H468" stroke="#e6eaed" stroke-width="1"/>
 
-      <text x="28" y="96" fill="#e2543f" font-size="17" font-weight="700" letter-spacing="1.6">QUERY</text>
-      <text x="28" y="168" fill="#e2543f" font-size="17" font-weight="700" letter-spacing="1.6">VARIANT</text>
-      <text x="28" y="250" fill="#e2543f" font-size="17" font-weight="700" letter-spacing="1.6">EVIDENCE</text>
-    </g>
+      <text x="28" y="96" fill="#7a858f" font-size="18">query</text>
+      <text x="128" y="96" fill="#0f1316" font-size="20">reduce turnover</text>
 
-    <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
-      <text x="28" y="130" fill="#f7f1e6" font-size="22">reduce turnover</text>
-      <text x="28" y="202" fill="#f7f1e6" font-size="22">lower turnover</text>
-    </g>
+      <text x="28" y="130" fill="#7a858f" font-size="18">variant</text>
+      <text x="128" y="130" fill="#0f1316" font-size="20">lower turnover</text>
 
-    <path d="M28 222H408" stroke="#2f3d4a" stroke-width="1.5"/>
+      <path d="M28 158H468" stroke="#e6eaed" stroke-width="1"/>
 
-    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
-      <text x="28" y="278" fill="#cdd6e0" font-size="20">chunk 4120…:chunk:0</text>
-      <text x="28" y="312" fill="#8b98a4" font-size="19">“…verbatim excerpt…”</text>
-      <text x="28" y="352" fill="#e2543f" font-size="20">[1204–1231]</text>
-      <text x="188" y="352" fill="#8b98a4" font-size="18">hash match</text>
+      <text x="28" y="186" fill="#9aa4ad" font-size="16">#</text>
+      <text x="76" y="186" fill="#9aa4ad" font-size="16" letter-spacing="0.8">CHUNK</text>
+      <text x="300" y="186" fill="#9aa4ad" font-size="16" letter-spacing="0.8">OFFSETS</text>
+
+      <text x="28" y="220" fill="#7a858f" font-size="18">1</text>
+      <text x="76" y="220" fill="#0f1316" font-size="19">4120…:chunk:0</text>
+      <text x="300" y="220" fill="#2f5d75" font-size="19">[1204–1231]</text>
+
+      <text x="28" y="254" fill="#7a858f" font-size="18">2</text>
+      <text x="76" y="254" fill="#0f1316" font-size="19">3987…:chunk:1</text>
+      <text x="300" y="254" fill="#2f5d75" font-size="19">[840–902]</text>
     </g>
   </g>
 </svg>
