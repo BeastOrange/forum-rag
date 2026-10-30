@@ -559,6 +559,10 @@ def _tool_errors(tool):
     Any other exception is collapsed by the MCP SDK into
     "Error executing tool <name>", which hides why the call failed: a missing
     knowledge page and a rejected review would look identical to the caller.
+
+    Only caller-fixable failures are converted. Other OSError subclasses
+    (ENOSPC, EACCES, ...) are infrastructure faults and must keep propagating so
+    they stay visible with a traceback.
     """
 
     def readable(exc: Exception) -> ToolError:
@@ -574,7 +578,12 @@ def _tool_errors(tool):
         async def async_wrapper(*args, **kwargs):
             try:
                 return await tool(*args, **kwargs)
-            except (ValueError, OSError) as exc:
+            except (
+                ValueError,
+                FileNotFoundError,
+                NotADirectoryError,
+                IsADirectoryError,
+            ) as exc:
                 raise readable(exc) from exc
 
         return async_wrapper
@@ -583,7 +592,12 @@ def _tool_errors(tool):
     def wrapper(*args, **kwargs):
         try:
             return tool(*args, **kwargs)
-        except (ValueError, OSError) as exc:
+        except (
+            ValueError,
+            FileNotFoundError,
+            NotADirectoryError,
+            IsADirectoryError,
+        ) as exc:
             raise readable(exc) from exc
 
     return wrapper
