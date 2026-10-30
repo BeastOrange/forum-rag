@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
 
 from __future__ import annotations
 
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from wq_forum_rag.indexer import raise_if_database_locked
@@ -27,7 +26,10 @@ class WikiService:
         root.mkdir(parents=True, exist_ok=True)
         try:
             with KnowledgeStore(self.db_path, initialize=False) as store:
-                pages = [store.get_page(item["slug"]) for item in store.list_pages(include_drafts=include_drafts)]
+                pages = [
+                    store.get_page(item["slug"])
+                    for item in store.list_pages(include_drafts=include_drafts)
+                ]
                 pages = [page for page in pages if page]
                 events = self._recent_events(store)
         except sqlite3.OperationalError as exc:
@@ -75,7 +77,10 @@ class WikiService:
                     frontier = next_frontier
                     if not frontier:
                         break
-                nodes = [store.get_page(node) or {"slug": node, "missing": True} for node in sorted(seen)]
+                nodes = [
+                    store.get_page(node) or {"slug": node, "missing": True}
+                    for node in sorted(seen)
+                ]
         except sqlite3.OperationalError as exc:
             raise_if_database_locked(exc, self.db_path)
             raise
@@ -87,7 +92,7 @@ class WikiService:
         slug: str,
         relation_type: str | None,
     ) -> list[dict[str, Any]]:
-        if not store._table_exists("knowledge_links"):  # noqa: SLF001
+        if not store._table_exists("knowledge_links"):
             return []
         params: list[Any] = [slug, slug]
         relation_sql = ""
@@ -104,7 +109,9 @@ class WikiService:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def _recent_events(self, store: KnowledgeStore, limit: int = 50) -> list[dict[str, Any]]:
+    def _recent_events(
+        self, store: KnowledgeStore, limit: int = 50
+    ) -> list[dict[str, Any]]:
         rows = store.conn.execute(
             """
             SELECT * FROM knowledge_events
@@ -161,9 +168,13 @@ class WikiService:
             )
         return "\n".join(lines).strip() + "\n"
 
-    def _hot_markdown(self, pages: list[dict[str, Any]], events: list[dict[str, Any]]) -> str:
+    def _hot_markdown(
+        self, pages: list[dict[str, Any]], events: list[dict[str, Any]]
+    ) -> str:
         lines = ["# Hot Snapshot", "", "## Recently Updated"]
-        for page in sorted(pages, key=lambda item: item["updated_at"], reverse=True)[:10]:
+        for page in sorted(pages, key=lambda item: item["updated_at"], reverse=True)[
+            :10
+        ]:
             lines.append(f"- [[{page['slug']}]] - {page['summary']}")
         lines.extend(["", "## Recent Events"])
         for event in events[:10]:

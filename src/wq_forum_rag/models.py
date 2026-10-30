@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -130,7 +129,9 @@ class Topic:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> Topic:
-        comments = tuple(Comment.from_dict(item) for item in payload.get("comments", []))
+        comments = tuple(
+            Comment.from_dict(item) for item in payload.get("comments", [])
+        )
         return cls(
             id=payload["id"],
             community_id=payload["community_id"],

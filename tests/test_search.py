@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -7,8 +6,8 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from pathlib import Path
 import types
+from pathlib import Path
 
 import pytest
 
@@ -111,7 +110,9 @@ def test_hybrid_search_returns_ranked_hits_with_filters_and_snippets(
     assert hits[0].score > 0
 
 
-def test_forum_searcher_uses_hybrid_ranking(sample_chunks: list[dict[str, str]]) -> None:
+def test_forum_searcher_uses_hybrid_ranking(
+    sample_chunks: list[dict[str, str]],
+) -> None:
     searcher = ForumSearcher(
         sample_chunks,
         embedding_backend=HashEmbeddingBackend(dims=96, seed="forum-searcher"),

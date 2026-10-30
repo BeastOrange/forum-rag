@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -40,16 +39,12 @@ def _iter_features(text: str) -> list[str]:
             features.append(token)
             features.extend(token[index] for index in range(len(token)))
             features.extend(
-                token[index : index + 2]
-                for index in range(max(len(token) - 1, 0))
+                token[index : index + 2] for index in range(max(len(token) - 1, 0))
             )
             continue
         features.append(token)
         if len(token) >= 3:
-            features.extend(
-                token[index : index + 3]
-                for index in range(len(token) - 2)
-            )
+            features.extend(token[index : index + 3] for index in range(len(token) - 2))
     return features
 
 
@@ -75,7 +70,7 @@ class HashEmbeddingBackend:
     def embed_query(self, text: str) -> list[float]:
         vector = [0.0] * self.dims
         for feature in _iter_features(text):
-            digest = hashlib.sha256(f"{self.seed}:{feature}".encode("utf-8")).digest()
+            digest = hashlib.sha256(f"{self.seed}:{feature}".encode()).digest()
             bucket = int.from_bytes(digest[:4], byteorder="big") % self.dims
             sign = 1.0 if digest[4] % 2 == 0 else -1.0
             magnitude = 1.0 + (digest[5] / 255.0)

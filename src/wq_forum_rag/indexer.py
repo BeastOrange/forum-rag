@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -59,8 +58,12 @@ class ForumIndexService:
         source = Path(json_path).expanduser()
         fingerprint = self._source_fingerprint(source)
         with self.storage.ForumStore(self.db_path) as store:
-            known = dict(store.conn.execute("SELECT key, value FROM schema_meta").fetchall())
-            if not rebuild and all(known.get(key) == value for key, value in fingerprint.items()):
+            known = dict(
+                store.conn.execute("SELECT key, value FROM schema_meta").fetchall()
+            )
+            if not rebuild and all(
+                known.get(key) == value for key, value in fingerprint.items()
+            ):
                 total = store.conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0]
                 return self._unchanged_payload(source, total)
             if rebuild:
@@ -108,22 +111,32 @@ class ForumIndexService:
             )
         except sqlite3.OperationalError as exc:
             if is_database_locked(exc):
-                return database_locked_status(self.db_path, json_path=latest, reason=str(exc))
+                return database_locked_status(
+                    self.db_path, json_path=latest, reason=str(exc)
+                )
             raise
-        return {"status": "refreshed", "index": index_result, "manifest": manifest_result}
+        return {
+            "status": "refreshed",
+            "index": index_result,
+            "manifest": manifest_result,
+        }
 
     def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
         if top_k <= 0 or not query.strip():
             return []
         self._ensure_readable()
         try:
-            candidates = fts_candidates(self.db_path, query, kind="forum_chunk", limit=max(top_k * 20, 80))
+            candidates = fts_candidates(
+                self.db_path, query, kind="forum_chunk", limit=max(top_k * 20, 80)
+            )
             if not candidates:
                 return []
             rows = self._search_rows(candidates)
             topic_meta = {row["topic_id"]: row for row in rows}
             backend = CachedEmbeddingBackend(self.db_path, writable=False)
-            hits = self.search_mod.ForumSearcher(rows, embedding_backend=backend).search(
+            hits = self.search_mod.ForumSearcher(
+                rows, embedding_backend=backend
+            ).search(
                 query=query,
                 top_k=len(rows),
             )
@@ -170,11 +183,15 @@ class ForumIndexService:
         if not base:
             return []
         ranked = [
-            item for item in self.search(base["title"], top_k=top_k + 3)
+            item
+            for item in self.search(base["title"], top_k=top_k + 3)
             if item["topic_id"] != topic_id
         ]
         same = [item for item in ranked if item["community_id"] == base["community_id"]]
-        return (same + [item for item in ranked if item["community_id"] != base["community_id"]])[:top_k]
+        return (
+            same
+            + [item for item in ranked if item["community_id"] != base["community_id"]]
+        )[:top_k]
 
     def _ensure_readable(self) -> None:
         refresh = self.auto_refresh_if_needed()
@@ -190,7 +207,9 @@ class ForumIndexService:
         fingerprint = self._source_fingerprint(source)
         try:
             with self.storage.ForumStore(self.db_path, initialize=False) as store:
-                known = dict(store.conn.execute("SELECT key, value FROM schema_meta").fetchall())
+                known = dict(
+                    store.conn.execute("SELECT key, value FROM schema_meta").fetchall()
+                )
         except Exception:
             return True
         return any(known.get(key) != value for key, value in fingerprint.items())
@@ -206,13 +225,18 @@ class ForumIndexService:
         """
         order_clause = " ORDER BY c.topic_id, c.chunk_level, c.chunk_index"
         with self.storage.ForumStore(self.db_path, initialize=False) as store:
-            if not self._table_exists(store.conn, "chunks") or not self._table_exists(store.conn, "topics"):
+            if not self._table_exists(store.conn, "chunks") or not self._table_exists(
+                store.conn, "topics"
+            ):
                 return []
             if not candidates:
                 return []
             placeholders = ",".join("?" * len(candidates))
             query = base_sql + f" AND c.chunk_id IN ({placeholders})" + order_clause
-            return [dict(row) for row in store.conn.execute(query, tuple(candidates)).fetchall()]
+            return [
+                dict(row)
+                for row in store.conn.execute(query, tuple(candidates)).fetchall()
+            ]
 
     def _format_hits(
         self,
@@ -248,7 +272,9 @@ class ForumIndexService:
             "score": hit.score,
         }
 
-    def _exact_rows(self, normalized: str, *, community: str | None, top_k: int) -> list[Any]:
+    def _exact_rows(
+        self, normalized: str, *, community: str | None, top_k: int
+    ) -> list[Any]:
         lowered = normalized.lower()
         escaped = lowered.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         like_value = f"%{escaped}%"
@@ -262,7 +288,12 @@ class ForumIndexService:
                    FROM topics t WHERE t.topic_id = ?
                      AND (? IS NULL OR t.community_id = ? OR lower(t.community_title) = ?)
                    LIMIT 1""",
-                (normalized, community, community, community.lower() if community else None),
+                (
+                    normalized,
+                    community,
+                    community,
+                    community.lower() if community else None,
+                ),
             ).fetchall()
             if direct:
                 return direct
@@ -295,9 +326,24 @@ class ForumIndexService:
                 LIMIT ?
                 """,
                 (
-                    normalized, lowered, lowered, like_value, like_value, like_value, like_value,
-                    like_value, community, community, community.lower() if community else None,
-                    normalized, lowered, lowered, like_value, like_value, like_value, like_value,
+                    normalized,
+                    lowered,
+                    lowered,
+                    like_value,
+                    like_value,
+                    like_value,
+                    like_value,
+                    like_value,
+                    community,
+                    community,
+                    community.lower() if community else None,
+                    normalized,
+                    lowered,
+                    lowered,
+                    like_value,
+                    like_value,
+                    like_value,
+                    like_value,
                     top_k,
                 ),
             ).fetchall()
@@ -313,16 +359,21 @@ class ForumIndexService:
             "url": row["url"],
             "vote_num": row["vote_num"],
             "comment_num": row["comment_count"],
-            "snippet": self.search_mod._build_snippet(  # noqa: SLF001
+            "snippet": self.search_mod._build_snippet(
                 normalized,
-                {"content": row["matched_content"] or row["title"], "title": row["title"]},
+                {
+                    "content": row["matched_content"] or row["title"],
+                    "title": row["title"],
+                },
             ),
             "rank": row["exact_rank"],
         }
 
     @staticmethod
     def _prune_orphans(conn: Any, seen_ids: set[str]) -> dict[str, Any]:
-        db_topic_ids = {row[0] for row in conn.execute("SELECT topic_id FROM topics").fetchall()}
+        db_topic_ids = {
+            row[0] for row in conn.execute("SELECT topic_id FROM topics").fetchall()
+        }
         orphans = db_topic_ids - seen_ids
         if not orphans:
             return {"pruned": 0, "protected_orphans": []}
@@ -333,8 +384,14 @@ class ForumIndexService:
                 for offset in range(0, len(to_delete), 500):
                     batch = to_delete[offset : offset + 500]
                     placeholders = ",".join("?" * len(batch))
-                    conn.execute(f"DELETE FROM topics WHERE topic_id IN ({placeholders})", tuple(batch))
-        return {"pruned": len(to_delete), "protected_orphans": sorted(orphans & protected)}
+                    conn.execute(
+                        f"DELETE FROM topics WHERE topic_id IN ({placeholders})",
+                        tuple(batch),
+                    )
+        return {
+            "pruned": len(to_delete),
+            "protected_orphans": sorted(orphans & protected),
+        }
 
     @staticmethod
     def _protected_topic_ids(conn: Any) -> set[str]:
@@ -373,7 +430,9 @@ class ForumIndexService:
         }
 
 
-def latest_export_for(db_path: str | Path, *, source: str | Path | None = None) -> Path | None:
+def latest_export_for(
+    db_path: str | Path, *, source: str | Path | None = None
+) -> Path | None:
     configured = _configured_source(source)
     if configured:
         return _latest_from_source(configured)
@@ -409,7 +468,9 @@ def _latest_from_source(source: Path) -> Path | None:
 
 def _latest_related_export(source_path: Path) -> Path | None:
     if source_path.is_file():
-        exports = [path for path in source_path.parent.glob(EXPORT_PATTERN) if path.is_file()]
+        exports = [
+            path for path in source_path.parent.glob(EXPORT_PATTERN) if path.is_file()
+        ]
         if exports:
             return max(exports, key=lambda path: (path.stat().st_mtime_ns, path.name))
         return source_path

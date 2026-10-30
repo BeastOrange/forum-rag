@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -11,7 +10,11 @@ from contextlib import closing
 from functools import lru_cache
 from pathlib import Path
 
-from wq_forum_rag.embeddings import EmbeddingBackend, HashEmbeddingBackend, build_embedding_backend
+from wq_forum_rag.embeddings import (
+    EmbeddingBackend,
+    HashEmbeddingBackend,
+    build_embedding_backend,
+)
 from wq_forum_rag.models import hash_text
 
 
@@ -59,10 +62,15 @@ class CachedEmbeddingBackend:
                 self._fill_misses_read_only(misses, vectors)
         return [vector or [] for vector in vectors]
 
-    def _cached_vector(self, conn: sqlite3.Connection, content_hash: str) -> list[float] | None:
-        if not self.writable and not conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE name = ?", ("embedding_cache",)
-        ).fetchone():
+    def _cached_vector(
+        self, conn: sqlite3.Connection, content_hash: str
+    ) -> list[float] | None:
+        if (
+            not self.writable
+            and not conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE name = ?", ("embedding_cache",)
+            ).fetchone()
+        ):
             return None
         row = conn.execute(
             """
@@ -88,7 +96,11 @@ class CachedEmbeddingBackend:
             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
             """,
             [
-                (self.backend_id, content_hash, json.dumps(vector, separators=(",", ":")))
+                (
+                    self.backend_id,
+                    content_hash,
+                    json.dumps(vector, separators=(",", ":")),
+                )
                 for (_, content_hash, _), vector in zip(misses, embedded, strict=True)
             ],
         )
@@ -103,8 +115,10 @@ class CachedEmbeddingBackend:
         if not misses:
             return
         if type(self.backend) is HashEmbeddingBackend:
-            embedded = [list(_hash_vector(text, self.backend.dims, self.backend.seed))
-                        for _, _, text in misses]
+            embedded = [
+                list(_hash_vector(text, self.backend.dims, self.backend.seed))
+                for _, _, text in misses
+            ]
         else:
             embedded = self.backend.embed_documents([item[2] for item in misses])
         for (index, _, _), vector in zip(misses, embedded, strict=True):

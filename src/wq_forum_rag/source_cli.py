@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -29,7 +28,9 @@ def register_source_commands(app: typer.Typer) -> None:
         db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", dir_okay=False),
     ) -> None:
         try:
-            console.print_json(data=SourceManifestService(db_path).source_status(source))
+            console.print_json(
+                data=SourceManifestService(db_path).source_status(source)
+            )
         except sqlite3.OperationalError as exc:
             try:
                 raise_if_database_locked(exc, db_path)
@@ -46,7 +47,9 @@ def register_source_commands(app: typer.Typer) -> None:
     ) -> None:
         try:
             console.print_json(
-                data=SourceManifestService(db_path).source_ingest_plan(source, commit=commit)
+                data=SourceManifestService(db_path).source_ingest_plan(
+                    source, commit=commit
+                )
             )
         except sqlite3.OperationalError as exc:
             try:

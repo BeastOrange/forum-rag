@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -9,7 +8,7 @@ import re
 import sqlite3
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -143,7 +142,7 @@ def build_doc_chunks(
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class DocumentStore:
@@ -172,20 +171,32 @@ class DocumentStore:
         window_size: int = 1_500,
         overlap: int = 200,
     ) -> tuple[dict[str, int], set[str]]:
-        stats = {"seen": 0, "inserted": 0, "updated": 0, "skipped": 0, "chunks_written": 0}
+        stats = {
+            "seen": 0,
+            "inserted": 0,
+            "updated": 0,
+            "skipped": 0,
+            "chunks_written": 0,
+        }
         seen_slugs: set[str] = set()
         with self.conn:
             for document in documents:
                 stats["seen"] += 1
                 seen_slugs.add(document.slug)
                 existing_hash = self._existing_hash(document.slug)
-                if existing_hash == document.content_hash and self._has_chunks(document.slug):
+                if existing_hash == document.content_hash and self._has_chunks(
+                    document.slug
+                ):
                     stats["skipped"] += 1
                     continue
 
                 operation = "updated" if existing_hash else "inserted"
                 now = _now_iso()
-                created_at = document.created_at or self._existing_created_at(document.slug) or now
+                created_at = (
+                    document.created_at
+                    or self._existing_created_at(document.slug)
+                    or now
+                )
                 self.conn.execute(
                     """
                     INSERT INTO documents (
@@ -208,8 +219,12 @@ class DocumentStore:
                         now,
                     ),
                 )
-                self.conn.execute("DELETE FROM doc_chunks WHERE slug = ?", (document.slug,))
-                chunks = build_doc_chunks(document, window_size=window_size, overlap=overlap)
+                self.conn.execute(
+                    "DELETE FROM doc_chunks WHERE slug = ?", (document.slug,)
+                )
+                chunks = build_doc_chunks(
+                    document, window_size=window_size, overlap=overlap
+                )
                 self.conn.executemany(
                     """
                     INSERT INTO doc_chunks (
@@ -234,7 +249,9 @@ class DocumentStore:
         return stats, seen_slugs
 
     def prune_missing(self, seen_slugs: set[str]) -> int:
-        existing = {row[0] for row in self.conn.execute("SELECT slug FROM documents").fetchall()}
+        existing = {
+            row[0] for row in self.conn.execute("SELECT slug FROM documents").fetchall()
+        }
         to_delete = sorted(existing - seen_slugs)
         if not to_delete:
             return 0

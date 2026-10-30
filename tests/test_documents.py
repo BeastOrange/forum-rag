@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -51,7 +50,9 @@ def test_iter_documents_uses_h1_as_title(tmp_path: Path) -> None:
 
 def test_build_doc_chunks_window_and_overlap(tmp_path: Path) -> None:
     body = "abcdefghij" * 30
-    document = Document(slug="alpha-doc", title="Alpha", source_path="alpha.md", body=body)
+    document = Document(
+        slug="alpha-doc", title="Alpha", source_path="alpha.md", body=body
+    )
     chunks = build_doc_chunks(document, window_size=80, overlap=20)
     assert len(chunks) > 1
     assert chunks[0].chunk_index == 0
@@ -71,7 +72,11 @@ def test_document_store_skips_unchanged_and_prunes_missing(tmp_path: Path) -> No
     assert first_stats["seen"] == 3
     assert first_stats["inserted"] == 3
     assert first_stats["chunks_written"] >= 3
-    assert first_seen == {"operators", "neutralization", "how-to-use-price-volume-dataset"}
+    assert first_seen == {
+        "operators",
+        "neutralization",
+        "how-to-use-price-volume-dataset",
+    }
     assert second_stats["skipped"] == 3
     assert second_stats["chunks_written"] == 0
 
@@ -91,14 +96,24 @@ def test_ingest_docs_cli_indexes_and_searches(tmp_path: Path) -> None:
     db_path = tmp_path / "forum.sqlite3"
     runner = CliRunner()
 
-    ingest_result = runner.invoke(app, ["ingest-docs", str(docs_root), "--db", str(db_path)])
+    ingest_result = runner.invoke(
+        app, ["ingest-docs", str(docs_root), "--db", str(db_path)]
+    )
     assert ingest_result.exit_code == 0
     payload = json.loads(ingest_result.stdout)
     assert payload["indexed_documents"] == 3
     assert payload["search_index"]["doc_chunks"] >= 3
 
     search_result = runner.invoke(
-        app, ["search-docs", "subindustry neutralization", "--db", str(db_path), "--top-k", "3"]
+        app,
+        [
+            "search-docs",
+            "subindustry neutralization",
+            "--db",
+            str(db_path),
+            "--top-k",
+            "3",
+        ],
     )
     assert search_result.exit_code == 0
     assert "neutralization" in search_result.stdout
@@ -118,7 +133,10 @@ def test_mcp_doc_tools_round_trip(tmp_path: Path) -> None:
     assert ingest_payload["indexed_documents"] == 3
 
     search_payload = search_docs("price volume", db=str(db_path), top_k=3)
-    assert any(item["slug"] == "how-to-use-price-volume-dataset" for item in search_payload["results"])
+    assert any(
+        item["slug"] == "how-to-use-price-volume-dataset"
+        for item in search_payload["results"]
+    )
 
     get_payload = get_doc("operators", db=str(db_path))
     assert get_payload["document"] is not None
@@ -126,7 +144,10 @@ def test_mcp_doc_tools_round_trip(tmp_path: Path) -> None:
 
     conn = sqlite3.connect(db_path)
     try:
-        kinds = {row[0] for row in conn.execute("SELECT DISTINCT kind FROM document_fts").fetchall()}
+        kinds = {
+            row[0]
+            for row in conn.execute("SELECT DISTINCT kind FROM document_fts").fetchall()
+        }
     finally:
         conn.close()
     assert "doc_chunk" in kinds

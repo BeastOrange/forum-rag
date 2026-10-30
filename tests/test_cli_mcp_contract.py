@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -18,12 +17,12 @@ from wq_forum_rag.mcp_server import (
     find_by_exact,
     get_doc,
     get_knowledge_page,
-    graph_query,
-    lint_knowledge,
     get_post,
+    graph_query,
     link_knowledge_pages,
-    publish_knowledge_page,
+    lint_knowledge,
     propose_knowledge_page,
+    publish_knowledge_page,
     rebuild_search_index,
     related_posts,
     search_docs,
@@ -160,15 +159,21 @@ def test_cli_contract_end_to_end(tmp_path: Path) -> None:
     _write_fixture(json_path)
     runner = CliRunner()
 
-    index_result = runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"])
+    index_result = runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+    )
     assert index_result.exit_code == 0
     assert '"indexed_topics": 2' in index_result.stdout
 
-    unchanged_result = runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path)])
+    unchanged_result = runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path)]
+    )
     assert unchanged_result.exit_code == 0
     assert '"status": "unchanged"' in unchanged_result.stdout
 
-    search_result = runner.invoke(app, ["search", "neutralization", "--db", str(db_path), "--top-k", "2"])
+    search_result = runner.invoke(
+        app, ["search", "neutralization", "--db", str(db_path), "--top-k", "2"]
+    )
     assert search_result.exit_code == 0
     assert "Neutralization checklist" in search_result.stdout
 
@@ -186,7 +191,9 @@ def test_mcp_tool_contract_without_client(tmp_path: Path) -> None:
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
     runner = CliRunner()
-    runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"])
+    runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+    )
 
     search_payload = search_forum("alpha", db=str(db_path), top_k=3)
     assert search_payload["query"] == "alpha"
@@ -227,7 +234,9 @@ def test_mcp_read_only_tools_tolerate_existing_empty_database(tmp_path: Path) ->
     assert search_knowledge("alpha", db=str(db_path))["results"] == []
     assert get_knowledge_page("alpha/x", db=str(db_path))["page"] is None
     assert lint_knowledge(db=str(db_path))["blocking_count"] == 0
-    assert graph_query("alpha/x", db=str(db_path))["nodes"] == [{"slug": "alpha/x", "missing": True}]
+    assert graph_query("alpha/x", db=str(db_path))["nodes"] == [
+        {"slug": "alpha/x", "missing": True}
+    ]
 
 
 def test_mcp_write_tools_tolerate_existing_empty_database(tmp_path: Path) -> None:
@@ -247,18 +256,27 @@ def test_mcp_write_tools_tolerate_existing_empty_database(tmp_path: Path) -> Non
     except ValueError as exc:
         assert "source_topic_ids must reference existing forum topics" in str(exc)
     else:
-        raise AssertionError("propose_knowledge_page should reject missing forum topics")
+        raise AssertionError(
+            "propose_knowledge_page should reject missing forum topics"
+        )
 
     publish_payload = publish_knowledge_page("alpha/missing", db=str(db_path))
     assert publish_payload["published"] is False
-    assert publish_payload["issues"] == [{"slug": "alpha/missing", "severity": "block", "code": "missing_page"}]
+    assert publish_payload["issues"] == [
+        {"slug": "alpha/missing", "severity": "block", "code": "missing_page"}
+    ]
 
     try:
         link_knowledge_pages("alpha/a", "alpha/b", "refines", db=str(db_path))
     except ValueError as exc:
-        assert "both source_slug and target_slug must reference existing knowledge pages" in str(exc)
+        assert (
+            "both source_slug and target_slug must reference existing knowledge pages"
+            in str(exc)
+        )
     else:
-        raise AssertionError("link_knowledge_pages should reject missing knowledge pages")
+        raise AssertionError(
+            "link_knowledge_pages should reject missing knowledge pages"
+        )
 
 
 def test_cli_read_only_tools_tolerate_existing_empty_database(tmp_path: Path) -> None:
@@ -268,8 +286,12 @@ def test_cli_read_only_tools_tolerate_existing_empty_database(tmp_path: Path) ->
 
     search_result = runner.invoke(app, ["search", "alpha", "--db", str(db_path)])
     show_result = runner.invoke(app, ["show", "t1", "--db", str(db_path)])
-    context_result = runner.invoke(app, ["evolve-context", "alpha", "--db", str(db_path)])
-    knowledge_search_result = runner.invoke(app, ["knowledge-search", "alpha", "--db", str(db_path), "--json"])
+    context_result = runner.invoke(
+        app, ["evolve-context", "alpha", "--db", str(db_path)]
+    )
+    knowledge_search_result = runner.invoke(
+        app, ["knowledge-search", "alpha", "--db", str(db_path), "--json"]
+    )
 
     assert search_result.exit_code == 0
     assert "Top 0" in search_result.stdout
@@ -280,7 +302,9 @@ def test_cli_read_only_tools_tolerate_existing_empty_database(tmp_path: Path) ->
     assert '"results": []' in knowledge_search_result.stdout
 
 
-def test_search_auto_refreshes_when_source_json_changes(tmp_path: Path, monkeypatch) -> None:
+def test_search_auto_refreshes_when_source_json_changes(
+    tmp_path: Path, monkeypatch
+) -> None:
     json_path = tmp_path / "WQPCommunityState_20260618_142702.json"
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
@@ -297,7 +321,9 @@ def test_search_auto_refreshes_when_source_json_changes(tmp_path: Path, monkeypa
     assert post_payload["post"]["title"] == "Turnover ideas"
 
 
-def test_auto_refresh_returns_locked_status_when_write_lock_is_busy(tmp_path: Path, monkeypatch) -> None:
+def test_auto_refresh_returns_locked_status_when_write_lock_is_busy(
+    tmp_path: Path, monkeypatch
+) -> None:
     json_path = tmp_path / "WQPCommunityState_20260618_142702.json"
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
@@ -319,7 +345,9 @@ def test_auto_refresh_returns_locked_status_when_write_lock_is_busy(tmp_path: Pa
     assert payload["json"] == str(json_path)
 
 
-def test_mcp_search_returns_locked_payload_when_db_is_busy(tmp_path: Path, monkeypatch) -> None:
+def test_mcp_search_returns_locked_payload_when_db_is_busy(
+    tmp_path: Path, monkeypatch
+) -> None:
     json_path = tmp_path / "WQPCommunityState_20260618_142702.json"
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
@@ -342,7 +370,9 @@ def test_mcp_search_returns_locked_payload_when_db_is_busy(tmp_path: Path, monke
     assert payload["json"] == str(json_path)
 
 
-def test_mcp_get_post_returns_locked_payload_when_db_is_busy(tmp_path: Path, monkeypatch) -> None:
+def test_mcp_get_post_returns_locked_payload_when_db_is_busy(
+    tmp_path: Path, monkeypatch
+) -> None:
     json_path = tmp_path / "WQPCommunityState_20260618_142702.json"
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
@@ -365,7 +395,9 @@ def test_mcp_get_post_returns_locked_payload_when_db_is_busy(tmp_path: Path, mon
     assert payload["json"] == str(json_path)
 
 
-def test_mcp_knowledge_and_docs_return_locked_payload_when_db_is_busy(tmp_path: Path) -> None:
+def test_mcp_knowledge_and_docs_return_locked_payload_when_db_is_busy(
+    tmp_path: Path,
+) -> None:
     json_path = tmp_path / "forum.json"
     db_path = tmp_path / "forum.sqlite3"
     docs_dir = tmp_path / "docs"
@@ -373,8 +405,12 @@ def test_mcp_knowledge_and_docs_return_locked_payload_when_db_is_busy(tmp_path: 
     (docs_dir / "Alpha.md").write_text("# Alpha\n\ncontent", encoding="utf-8")
     _write_fixture(json_path)
     runner = CliRunner()
-    runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"])
-    runner.invoke(app, ["ingest-docs", str(docs_dir), "--db", str(db_path), "--rebuild"])
+    runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+    )
+    runner.invoke(
+        app, ["ingest-docs", str(docs_dir), "--db", str(db_path), "--rebuild"]
+    )
 
     conn = sqlite3.connect(db_path)
     try:
@@ -394,7 +430,9 @@ def test_mcp_knowledge_and_docs_return_locked_payload_when_db_is_busy(tmp_path: 
     assert reindex_payload["fts_available"] is False
 
 
-def test_cli_commands_report_locked_payload_when_db_is_busy(tmp_path: Path, monkeypatch) -> None:
+def test_cli_commands_report_locked_payload_when_db_is_busy(
+    tmp_path: Path, monkeypatch
+) -> None:
     json_path = tmp_path / "WQPCommunityState_20260618_142702.json"
     db_path = tmp_path / "forum.sqlite3"
     docs_dir = tmp_path / "docs"
@@ -403,7 +441,9 @@ def test_cli_commands_report_locked_payload_when_db_is_busy(tmp_path: Path, monk
     _write_fixture(json_path)
     runner = CliRunner()
     runner.invoke(app, ["refresh", str(json_path), "--db", str(db_path), "--rebuild"])
-    runner.invoke(app, ["ingest-docs", str(docs_dir), "--db", str(db_path), "--rebuild"])
+    runner.invoke(
+        app, ["ingest-docs", str(docs_dir), "--db", str(db_path), "--rebuild"]
+    )
     monkeypatch.setenv("WQ_FORUM_RAG_SOURCE", str(json_path))
 
     conn = sqlite3.connect(db_path)
@@ -411,7 +451,9 @@ def test_cli_commands_report_locked_payload_when_db_is_busy(tmp_path: Path, monk
         conn.execute("BEGIN EXCLUSIVE")
         search_result = runner.invoke(app, ["search", "alpha", "--db", str(db_path)])
         docs_result = runner.invoke(app, ["search-docs", "alpha", "--db", str(db_path)])
-        context_result = runner.invoke(app, ["evolve-context", "alpha", "--db", str(db_path)])
+        context_result = runner.invoke(
+            app, ["evolve-context", "alpha", "--db", str(db_path)]
+        )
     finally:
         conn.rollback()
         conn.close()
@@ -424,12 +466,16 @@ def test_cli_commands_report_locked_payload_when_db_is_busy(tmp_path: Path, monk
     assert '"status": "locked"' in context_result.stdout
 
 
-def test_search_can_read_during_immediate_write_transaction(tmp_path: Path, monkeypatch) -> None:
+def test_search_can_read_during_immediate_write_transaction(
+    tmp_path: Path, monkeypatch
+) -> None:
     json_path = tmp_path / "forum.json"
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
     runner = CliRunner()
-    result = runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"])
+    result = runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+    )
     assert result.exit_code == 0
     monkeypatch.setenv("WQ_FORUM_RAG_AUTO_REFRESH", "0")
 
@@ -445,12 +491,16 @@ def test_search_can_read_during_immediate_write_transaction(tmp_path: Path, monk
     assert payload["results"]
 
 
-def test_cli_search_can_read_during_immediate_write_transaction(tmp_path: Path, monkeypatch) -> None:
+def test_cli_search_can_read_during_immediate_write_transaction(
+    tmp_path: Path, monkeypatch
+) -> None:
     json_path = tmp_path / "forum.json"
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
     runner = CliRunner()
-    result = runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"])
+    result = runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+    )
     assert result.exit_code == 0
     monkeypatch.setenv("WQ_FORUM_RAG_AUTO_REFRESH", "0")
 
@@ -467,7 +517,9 @@ def test_cli_search_can_read_during_immediate_write_transaction(tmp_path: Path, 
     assert "Alpha decay" in search_result.stdout
 
 
-def test_knowledge_and_docs_can_read_during_immediate_write_transaction(tmp_path: Path, monkeypatch) -> None:
+def test_knowledge_and_docs_can_read_during_immediate_write_transaction(
+    tmp_path: Path, monkeypatch
+) -> None:
     json_path = tmp_path / "forum.json"
     db_path = tmp_path / "forum.sqlite3"
     docs_dir = tmp_path / "docs"
@@ -475,8 +527,18 @@ def test_knowledge_and_docs_can_read_during_immediate_write_transaction(tmp_path
     (docs_dir / "Alpha.md").write_text("# Alpha\n\ncontent", encoding="utf-8")
     _write_fixture(json_path)
     runner = CliRunner()
-    assert runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]).exit_code == 0
-    assert runner.invoke(app, ["ingest-docs", str(docs_dir), "--db", str(db_path), "--rebuild"]).exit_code == 0
+    assert (
+        runner.invoke(
+            app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            app, ["ingest-docs", str(docs_dir), "--db", str(db_path), "--rebuild"]
+        ).exit_code
+        == 0
+    )
     from wq_forum_rag.evolution import EvolutionService
 
     service = EvolutionService(db_path)
@@ -487,12 +549,17 @@ def test_knowledge_and_docs_can_read_during_immediate_write_transaction(tmp_path
         body="Body with enough content for a published page linked to topic t1.",
         source_topic_ids=["t1"],
         confidence=0.9,
-        source_evidence=[{
-            "topic_id": "t1", "claim": "Decay is discussed with neutralization",
-            "excerpt": "Alpha decay and neutralization notes.",
-        }],
+        source_evidence=[
+            {
+                "topic_id": "t1",
+                "claim": "Decay is discussed with neutralization",
+                "excerpt": "Alpha decay and neutralization notes.",
+            }
+        ],
     )
-    service.review_knowledge_page("alpha/guide", "reviewed", note="Checked the cited excerpt")
+    service.review_knowledge_page(
+        "alpha/guide", "reviewed", note="Checked the cited excerpt"
+    )
     assert service.publish_knowledge_page("alpha/guide")["published"]
     monkeypatch.setenv("WQ_FORUM_RAG_AUTO_REFRESH", "0")
 
@@ -522,7 +589,12 @@ def test_read_only_endpoints_do_not_require_optional_schema_during_immediate_wri
     (source_dir / "alpha.md").write_text("# Alpha\n", encoding="utf-8")
     _write_fixture(json_path)
     runner = CliRunner()
-    assert runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]).exit_code == 0
+    assert (
+        runner.invoke(
+            app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+        ).exit_code
+        == 0
+    )
     monkeypatch.setenv("WQ_FORUM_RAG_AUTO_REFRESH", "0")
 
     conn = sqlite3.connect(db_path)
@@ -533,7 +605,9 @@ def test_read_only_endpoints_do_not_require_optional_schema_during_immediate_wri
         lint_payload = lint_knowledge(db=str(db_path))
         graph_payload = graph_query("missing", db=str(db_path), depth=1)
         status_payload = source_status(str(source_dir), db=str(db_path))
-        plan_payload = source_ingest_plan(str(source_dir), db=str(db_path), commit=False)
+        plan_payload = source_ingest_plan(
+            str(source_dir), db=str(db_path), commit=False
+        )
     finally:
         conn.rollback()
         conn.close()
@@ -548,9 +622,16 @@ def test_read_only_endpoints_do_not_require_optional_schema_during_immediate_wri
     assert graph_payload["nodes"] == [{"slug": "missing", "missing": True}]
     assert graph_payload["edges"] == []
     assert "status" not in graph_payload
-    assert status_payload["counts"] == {"new": 1, "modified": 0, "unchanged": 0, "deleted": 0}
+    assert status_payload["counts"] == {
+        "new": 1,
+        "modified": 0,
+        "unchanged": 0,
+        "deleted": 0,
+    }
     assert "status" not in status_payload
-    assert plan_payload["ingest_plan"] == [{"relative_path": "alpha.md", "status": "new"}]
+    assert plan_payload["ingest_plan"] == [
+        {"relative_path": "alpha.md", "status": "new"}
+    ]
     assert plan_payload["delete_plan"] == []
     assert "status" not in plan_payload
 
@@ -566,18 +647,33 @@ def test_cli_read_only_commands_do_not_require_optional_schema_during_immediate_
     (source_dir / "alpha.md").write_text("# Alpha\n", encoding="utf-8")
     _write_fixture(json_path)
     runner = CliRunner()
-    assert runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]).exit_code == 0
+    assert (
+        runner.invoke(
+            app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+        ).exit_code
+        == 0
+    )
     monkeypatch.setenv("WQ_FORUM_RAG_AUTO_REFRESH", "0")
 
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("BEGIN IMMEDIATE")
-        show_doc_result = runner.invoke(app, ["show-doc", "missing", "--db", str(db_path)])
-        show_knowledge_result = runner.invoke(app, ["knowledge-show", "missing", "--db", str(db_path)])
+        show_doc_result = runner.invoke(
+            app, ["show-doc", "missing", "--db", str(db_path)]
+        )
+        show_knowledge_result = runner.invoke(
+            app, ["knowledge-show", "missing", "--db", str(db_path)]
+        )
         lint_result = runner.invoke(app, ["knowledge-lint", "--db", str(db_path)])
-        graph_result = runner.invoke(app, ["knowledge-graph", "missing", "--db", str(db_path), "--depth", "1"])
-        source_status_result = runner.invoke(app, ["source-status", str(source_dir), "--db", str(db_path)])
-        source_plan_result = runner.invoke(app, ["source-ingest-plan", str(source_dir), "--db", str(db_path)])
+        graph_result = runner.invoke(
+            app, ["knowledge-graph", "missing", "--db", str(db_path), "--depth", "1"]
+        )
+        source_status_result = runner.invoke(
+            app, ["source-status", str(source_dir), "--db", str(db_path)]
+        )
+        source_plan_result = runner.invoke(
+            app, ["source-ingest-plan", str(source_dir), "--db", str(db_path)]
+        )
     finally:
         conn.rollback()
         conn.close()
@@ -606,14 +702,18 @@ def test_refresh_command_prunes_orphans_and_commits_manifest(tmp_path: Path) -> 
     _write_fixture(json_path)
     runner = CliRunner()
 
-    initial = runner.invoke(app, ["refresh", str(json_path), "--db", str(db_path), "--rebuild"])
+    initial = runner.invoke(
+        app, ["refresh", str(json_path), "--db", str(db_path), "--rebuild"]
+    )
     assert initial.exit_code == 0
     initial_payload = json.loads(initial.stdout)
     assert initial_payload["index"]["indexed_topics"] == 2
     assert initial_payload["manifest"]["committed"] is True
 
     _write_fixture_only_t1(json_path)
-    refresh_result = runner.invoke(app, ["refresh", str(json_path), "--db", str(db_path)])
+    refresh_result = runner.invoke(
+        app, ["refresh", str(json_path), "--db", str(db_path)]
+    )
     assert refresh_result.exit_code == 0
     refresh_payload = json.loads(refresh_result.stdout)
     assert refresh_payload["index"]["indexed_topics"] == 1
@@ -622,8 +722,13 @@ def test_refresh_command_prunes_orphans_and_commits_manifest(tmp_path: Path) -> 
 
     conn = sqlite3.connect(db_path)
     try:
-        topic_ids = {row[0] for row in conn.execute("SELECT topic_id FROM topics").fetchall()}
-        chunk_topic_ids = {row[0] for row in conn.execute("SELECT DISTINCT topic_id FROM chunks").fetchall()}
+        topic_ids = {
+            row[0] for row in conn.execute("SELECT topic_id FROM topics").fetchall()
+        }
+        chunk_topic_ids = {
+            row[0]
+            for row in conn.execute("SELECT DISTINCT topic_id FROM chunks").fetchall()
+        }
     finally:
         conn.close()
     assert topic_ids == {"t1"}
@@ -635,28 +740,38 @@ def test_index_no_prune_keeps_orphans(tmp_path: Path) -> None:
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
     runner = CliRunner()
-    runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"])
+    runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+    )
 
     _write_fixture_only_t1(json_path)
-    result = runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--no-prune"])
+    result = runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path), "--no-prune"]
+    )
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["pruned"] == 0
 
     conn = sqlite3.connect(db_path)
     try:
-        topic_ids = {row[0] for row in conn.execute("SELECT topic_id FROM topics").fetchall()}
+        topic_ids = {
+            row[0] for row in conn.execute("SELECT topic_id FROM topics").fetchall()
+        }
     finally:
         conn.close()
     assert topic_ids == {"t1", "t2"}
 
 
-def test_index_prune_protects_topics_referenced_by_knowledge_pages(tmp_path: Path) -> None:
+def test_index_prune_protects_topics_referenced_by_knowledge_pages(
+    tmp_path: Path,
+) -> None:
     json_path = tmp_path / "forum.json"
     db_path = tmp_path / "forum.sqlite3"
     _write_fixture(json_path)
     runner = CliRunner()
-    runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"])
+    runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path), "--rebuild"]
+    )
 
     with KnowledgeStore(db_path) as kstore:
         with kstore.conn:
@@ -676,7 +791,9 @@ def test_index_prune_protects_topics_referenced_by_knowledge_pages(tmp_path: Pat
             )
 
     _write_fixture_only_t1(json_path)
-    result = runner.invoke(app, ["index", "--json", str(json_path), "--db", str(db_path)])
+    result = runner.invoke(
+        app, ["index", "--json", str(json_path), "--db", str(db_path)]
+    )
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["pruned"] == 0
@@ -684,7 +801,9 @@ def test_index_prune_protects_topics_referenced_by_knowledge_pages(tmp_path: Pat
 
     conn = sqlite3.connect(db_path)
     try:
-        topic_ids = {row[0] for row in conn.execute("SELECT topic_id FROM topics").fetchall()}
+        topic_ids = {
+            row[0] for row in conn.execute("SELECT topic_id FROM topics").fetchall()
+        }
     finally:
         conn.close()
     assert topic_ids == {"t1", "t2"}

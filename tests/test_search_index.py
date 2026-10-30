@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: konrad
 # WQ_ID: OB53521
 # Encoding: utf-8
@@ -70,10 +69,15 @@ class CountingBackend:
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         self.calls += 1
-        return [[float(len(text)), float(text.count("a") + text.count("A")), 1.0] for text in texts]
+        return [
+            [float(len(text)), float(text.count("a") + text.count("A")), 1.0]
+            for text in texts
+        ]
 
     def embed_query(self, text: str) -> list[float]:
-        raise AssertionError("CachedEmbeddingBackend should route query embeddings through embed_documents")
+        raise AssertionError(
+            "CachedEmbeddingBackend should route query embeddings through embed_documents"
+        )
 
 
 def test_fts_exact_match_supports_forum_and_knowledge(tmp_path: Path) -> None:
@@ -93,7 +97,9 @@ def test_fts_exact_match_supports_forum_and_knowledge(tmp_path: Path) -> None:
     assert payload["forum_docs"] >= 2
     assert payload["knowledge_docs"] >= 1
 
-    forum_candidates = fts_candidates(db_path, "subindustry neutralization", kind="forum_chunk")
+    forum_candidates = fts_candidates(
+        db_path, "subindustry neutralization", kind="forum_chunk"
+    )
     knowledge_candidates = fts_candidates(
         db_path,
         "subindustry neutralization",
@@ -105,7 +111,9 @@ def test_fts_exact_match_supports_forum_and_knowledge(tmp_path: Path) -> None:
     assert "alpha/neutralization-guide" in knowledge_candidates
 
 
-def test_embedding_cache_reuses_vectors_across_repeated_searches(tmp_path: Path) -> None:
+def test_embedding_cache_reuses_vectors_across_repeated_searches(
+    tmp_path: Path,
+) -> None:
     db_path = _index_fixture(tmp_path)
     backend = CountingBackend()
 
@@ -129,7 +137,9 @@ def test_embedding_cache_reuses_vectors_across_repeated_searches(tmp_path: Path)
     assert embedding_cache_count(db_path) >= 2
 
 
-def test_fallback_without_fts_still_returns_results(tmp_path: Path, monkeypatch) -> None:
+def test_fallback_without_fts_still_returns_results(
+    tmp_path: Path, monkeypatch
+) -> None:
     db_path = _index_fixture(tmp_path)
 
     def fake_init_search_schema(conn: sqlite3.Connection) -> bool:
@@ -146,7 +156,9 @@ def test_fallback_without_fts_still_returns_results(tmp_path: Path, monkeypatch)
         )
         return False
 
-    monkeypatch.setattr("wq_forum_rag.search_index.init_search_schema", fake_init_search_schema)
+    monkeypatch.setattr(
+        "wq_forum_rag.search_index.init_search_schema", fake_init_search_schema
+    )
 
     backend = CountingBackend()
     with ForumStore(db_path) as store:
