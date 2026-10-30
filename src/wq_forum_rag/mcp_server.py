@@ -1,11 +1,5 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
-import asyncio
 import os
 import sqlite3
 from pathlib import Path
@@ -18,10 +12,12 @@ from .documents import DocumentStore, ingest_documents
 from .evolution import EvolutionService
 from .indexer import ForumDatabaseBusyError, raise_if_database_locked
 from .manifest import SourceManifestService
+from .read_worker import ReadBusy, run_read
 from .search_cache import CachedEmbeddingBackend
 from .search_index import rebuild_search_index as rebuild_search_index_impl
 from .search_records import search_doc_records, search_knowledge_records
 from .storage import ForumStore
+
 
 def _resolve_db_path(db: str | None) -> Path:
     configured_db = os.environ.get("FORUM_RAG_DB") or os.environ.get("WQ_FORUM_RAG_DB")
@@ -30,6 +26,35 @@ def _resolve_db_path(db: str | None) -> Path:
 
 def _busy_payload(exc: ForumDatabaseBusyError, **extra: Any) -> dict[str, Any]:
     return {**extra, **exc.payload}
+
+
+async def _read_response(
+    retrieve, db_path: Path, value: str, *, error_fields: dict[str, Any], **options
+):
+    """Run a bounded read, preserving tool-specific identifiers on known errors."""
+    try:
+        result = await run_read(retrieve, db_path, value, **options)
+    except ReadBusy as exc:
+        return {
+            "status": "busy",
+            "db": str(db_path),
+            **error_fields,
+            "reason": str(exc),
+        }
+    except TimeoutError as exc:
+        return {
+            "status": "timeout",
+            "db": str(db_path),
+            **error_fields,
+            "reason": str(exc),
+        }
+    except sqlite3.OperationalError as exc:
+        try:
+            raise_if_database_locked(exc, db_path)
+        except ForumDatabaseBusyError as busy:
+            return _busy_payload(busy, db=str(db_path), **error_fields)
+        raise
+    return {"db": str(db_path), **result}
 
 
 def search_forum(query: str, db: str | None = None, top_k: int = 5) -> dict[str, Any]:
@@ -42,8 +67,13 @@ def search_forum(query: str, db: str | None = None, top_k: int = 5) -> dict[str,
 
 
 async def search_forum_batch(
-    query: str, query_variants: list[str] | None = None, db: str | None = None,
-    top_k: int = 6, evidence_chars: int = 600, max_evidence_chars: int = 6000,
+    query: str,
+    query_variants: list[str] | None = None,
+    db: str | None = None,
+    top_k: int = 6,
+    evidence_chars: int = 600,
+    max_evidence_chars: int = 6000,
+    compact: bool = False,
 ) -> dict[str, Any]:
     """Search local forum evidence in one call, without loading a local model.
 
@@ -54,27 +84,30 @@ async def search_forum_batch(
     Scores are retrieval ranks, not confidence. Use get_forum_evidence for more
     context around a returned chunk, or get_post when the full thread is needed.
     """
+    if type(compact) is not bool:
+        raise TypeError("compact must be a boolean")
     from .batch_search import search_forum_batch as retrieve
 
-    db_path = _resolve_db_path(db)
-    try:
-        result = await asyncio.to_thread(
-            retrieve, db_path, query, query_variants=query_variants, top_k=top_k,
-            evidence_chars=evidence_chars, max_evidence_chars=max_evidence_chars)
-    except TimeoutError as exc:
-        return {"status": "timeout", "query": query, "db": str(db_path), "results": [], "reason": str(exc)}
-    except sqlite3.OperationalError as exc:
-        try:
-            raise_if_database_locked(exc, db_path)
-        except ForumDatabaseBusyError as busy:
-            return _busy_payload(busy, query=query, db=str(db_path), results=[])
-        raise
-    return {"db": str(db_path), **result}
+    return await _read_response(
+        retrieve,
+        _resolve_db_path(db),
+        query,
+        error_fields={"query": query, "results": []},
+        query_variants=query_variants,
+        top_k=top_k,
+        evidence_chars=evidence_chars,
+        max_evidence_chars=max_evidence_chars,
+        **({"compact": compact} if compact is not False else {}),
+    )
 
 
 async def get_forum_evidence(
-    chunk_id: str, db: str | None = None, before: int = 1, after: int = 1,
-    max_chars: int = 6000, expected_content_hash: str | None = None,
+    chunk_id: str,
+    db: str | None = None,
+    before: int = 1,
+    after: int = 1,
+    max_chars: int = 6000,
+    expected_content_hash: str | None = None,
 ) -> dict[str, Any]:
     """Read bounded neighboring chunks from the same thread without model work.
 
@@ -84,20 +117,16 @@ async def get_forum_evidence(
     """
     from .batch_search import get_forum_evidence as retrieve
 
-    db_path = _resolve_db_path(db)
-    try:
-        result = await asyncio.to_thread(
-            retrieve, db_path, chunk_id, before=before, after=after, max_chars=max_chars,
-            expected_content_hash=expected_content_hash)
-    except TimeoutError as exc:
-        return {"status": "timeout", "chunk_id": chunk_id, "db": str(db_path), "evidence": [], "reason": str(exc)}
-    except sqlite3.OperationalError as exc:
-        try:
-            raise_if_database_locked(exc, db_path)
-        except ForumDatabaseBusyError as busy:
-            return _busy_payload(busy, chunk_id=chunk_id, db=str(db_path), evidence=[])
-        raise
-    return {"db": str(db_path), **result}
+    return await _read_response(
+        retrieve,
+        _resolve_db_path(db),
+        chunk_id,
+        error_fields={"chunk_id": chunk_id, "evidence": []},
+        before=before,
+        after=after,
+        max_chars=max_chars,
+        expected_content_hash=expected_content_hash,
+    )
 
 
 def get_post(topic_id: str, db: str | None = None) -> dict[str, Any]:
@@ -127,7 +156,9 @@ def find_by_exact(
     return {"value": value, "db": str(db_path), "results": results}
 
 
-def related_posts(topic_id: str, db: str | None = None, top_k: int = 5) -> dict[str, Any]:
+def related_posts(
+    topic_id: str, db: str | None = None, top_k: int = 5
+) -> dict[str, Any]:
     db_path = _resolve_db_path(db)
     try:
         posts = ForumIndexService(db_path).related_posts(topic_id=topic_id, top_k=top_k)
@@ -168,7 +199,9 @@ def source_ingest_plan(
         raise
 
 
-def build_evolution_context(query: str, db: str | None = None, top_k: int = 5) -> dict[str, Any]:
+def build_evolution_context(
+    query: str, db: str | None = None, top_k: int = 5
+) -> dict[str, Any]:
     db_path = _resolve_db_path(db)
     try:
         context = EvolutionService(db_path).build_evolution_context(
@@ -176,7 +209,9 @@ def build_evolution_context(query: str, db: str | None = None, top_k: int = 5) -
             top_k=top_k,
         )
     except ForumDatabaseBusyError as exc:
-        return _busy_payload(exc, query=query, published_knowledge=[], forum_evidence=[])
+        return _busy_payload(
+            exc, query=query, published_knowledge=[], forum_evidence=[]
+        )
     return {"query": query, "db": str(db_path), **context}
 
 
@@ -291,12 +326,16 @@ def lint_knowledge(db: str | None = None, slug: str | None = None) -> dict[str, 
     try:
         result = EvolutionService(db_path).lint_knowledge(slug=slug)
     except ForumDatabaseBusyError as exc:
-        return _busy_payload(exc, slug=slug, issues=[], blocking_count=0, warning_count=0)
+        return _busy_payload(
+            exc, slug=slug, issues=[], blocking_count=0, warning_count=0
+        )
     except sqlite3.OperationalError as exc:
         try:
             raise_if_database_locked(exc, db_path)
         except ForumDatabaseBusyError as busy:
-            return _busy_payload(busy, slug=slug, issues=[], blocking_count=0, warning_count=0)
+            return _busy_payload(
+                busy, slug=slug, issues=[], blocking_count=0, warning_count=0
+            )
         raise
     return {"db": str(db_path), **result}
 
@@ -317,7 +356,11 @@ def publish_knowledge_page(slug: str, db: str | None = None) -> dict[str, Any]:
 
 
 def review_knowledge_page(
-    slug: str, action: str, note: str, db: str | None = None, replacement_slug: str | None = None,
+    slug: str,
+    action: str,
+    note: str,
+    db: str | None = None,
+    replacement_slug: str | None = None,
 ) -> dict[str, Any]:
     """Record a human/agent review, request review, or archive with a reason.
 
@@ -326,7 +369,8 @@ def review_knowledge_page(
     db_path = _resolve_db_path(db)
     try:
         page = EvolutionService(db_path).review_knowledge_page(
-            slug, action, note=note, replacement_slug=replacement_slug)
+            slug, action, note=note, replacement_slug=replacement_slug
+        )
     except sqlite3.OperationalError as exc:
         try:
             raise_if_database_locked(exc, db_path)
@@ -377,7 +421,9 @@ def export_knowledge_wiki(
         try:
             raise_if_database_locked(exc, db_path)
         except ForumDatabaseBusyError as busy:
-            return _busy_payload(busy, output_dir=str(output_dir), page_count=0, written=[])
+            return _busy_payload(
+                busy, output_dir=str(output_dir), page_count=0, written=[]
+            )
         raise
     return {"db": str(db_path), **result}
 

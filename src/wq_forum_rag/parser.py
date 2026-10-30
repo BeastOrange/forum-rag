@@ -1,16 +1,11 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Iterator
 
 from wq_forum_rag.models import Chunk, Comment, Topic, hash_text, normalize_text
 
@@ -139,7 +134,9 @@ def build_chunks(
                 start_offset=start,
                 end_offset=end,
                 content=content,
-                content_hash=hash_text(topic_hash, str(child_index), str(start), content),
+                content_hash=hash_text(
+                    topic_hash, str(child_index), str(start), content
+                ),
             )
         )
         child_index += 1

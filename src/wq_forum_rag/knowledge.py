@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import re
@@ -132,17 +127,32 @@ class KnowledgeStore:
                     page.content_hash,
                 ),
             )
-            self.conn.execute("UPDATE knowledge_pages SET review_status = ? WHERE slug = ?", ("unreviewed", page.slug))
-            self.conn.execute("DELETE FROM knowledge_sources WHERE slug = ?", (page.slug,))
-            evidence = {str(item.get("topic_id", "")): item for item in (source_evidence or [])}
+            self.conn.execute(
+                "UPDATE knowledge_pages SET review_status = ? WHERE slug = ?",
+                ("unreviewed", page.slug),
+            )
+            self.conn.execute(
+                "DELETE FROM knowledge_sources WHERE slug = ?", (page.slug,)
+            )
+            evidence = {
+                str(item.get("topic_id", "")): item for item in (source_evidence or [])
+            }
             self.conn.executemany(
                 """
                 INSERT INTO knowledge_sources(slug, topic_id, evidence_note, source_content_hash, claim, excerpt)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                [(page.slug, topic_id, "", self._topic_hash(topic_id),
-                  str(evidence.get(topic_id, {}).get("claim") or ""),
-                  str(evidence.get(topic_id, {}).get("excerpt") or "")) for topic_id in unique_sources],
+                [
+                    (
+                        page.slug,
+                        topic_id,
+                        "",
+                        self._topic_hash(topic_id),
+                        str(evidence.get(topic_id, {}).get("claim") or ""),
+                        str(evidence.get(topic_id, {}).get("excerpt") or ""),
+                    )
+                    for topic_id in unique_sources
+                ],
             )
             for link in links:
                 self.link_pages(
@@ -152,7 +162,11 @@ class KnowledgeStore:
                     weight=float(link.get("weight", 1.0)),
                     confidence=float(link.get("confidence", page.confidence)),
                 )
-            self.add_event(page.slug, event_type, event_note or f"{page.status}:{page.content_hash}")
+            self.add_event(
+                page.slug,
+                event_type,
+                event_note or f"{page.status}:{page.content_hash}",
+            )
             self._sync_fts(page.slug)
         return page
 
@@ -167,9 +181,17 @@ class KnowledgeStore:
             return None
         payload = dict(row)
         page_slug = payload["slug"]
-        payload["sources"] = [dict(item) for item in self._rows("knowledge_sources", "slug", page_slug)]
-        payload["links"] = [dict(item) for item in self._rows("knowledge_links", "source_slug", page_slug)]
-        payload["backlinks"] = [dict(item) for item in self._rows("knowledge_links", "target_slug", page_slug)]
+        payload["sources"] = [
+            dict(item) for item in self._rows("knowledge_sources", "slug", page_slug)
+        ]
+        payload["links"] = [
+            dict(item)
+            for item in self._rows("knowledge_links", "source_slug", page_slug)
+        ]
+        payload["backlinks"] = [
+            dict(item)
+            for item in self._rows("knowledge_links", "target_slug", page_slug)
+        ]
         payload["events"] = [dict(item) for item in self._event_rows(page_slug)]
         return payload
 
@@ -220,7 +242,9 @@ class KnowledgeStore:
         target = normalize_slug(target_slug)
         relation = normalize_relation(relation_type)
         if not self.page_exists(source) or not self.page_exists(target):
-            raise ValueError("both source_slug and target_slug must reference existing knowledge pages")
+            raise ValueError(
+                "both source_slug and target_slug must reference existing knowledge pages"
+            )
         bounded_confidence = max(0.0, min(float(confidence), 1.0))
         self.conn.execute(
             """
@@ -243,7 +267,9 @@ class KnowledgeStore:
             "confidence": bounded_confidence,
         }
 
-    def set_status(self, slug: str, status: str, note: str = "") -> dict[str, Any] | None:
+    def set_status(
+        self, slug: str, status: str, note: str = ""
+    ) -> dict[str, Any] | None:
         page_slug = normalize_slug(slug)
         normalized_status = normalize_status(status)
         if not self.page_exists(page_slug):
@@ -322,24 +348,35 @@ class KnowledgeStore:
             ("knowledge_sources", "claim", "TEXT NOT NULL DEFAULT ''"),
             ("knowledge_sources", "excerpt", "TEXT NOT NULL DEFAULT ''"),
         ):
-            columns = {row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")}
+            columns = {
+                row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")
+            }
             if column not in columns:
-                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                self.conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {definition}"
+                )
         self.conn.commit()
 
     def _topic_hash(self, topic_id: str) -> str:
-        row = self.conn.execute("SELECT content_hash FROM topics WHERE topic_id = ?", (topic_id,)).fetchone()
+        row = self.conn.execute(
+            "SELECT content_hash FROM topics WHERE topic_id = ?", (topic_id,)
+        ).fetchone()
         return str(row[0]) if row else ""
 
     def _sync_fts(self, slug: str) -> None:
         chinese_index.sync_knowledge(self.conn, slug)
         if not self._table_exists("document_fts"):
             return
-        self.conn.execute("DELETE FROM document_fts WHERE kind = 'knowledge_page' AND record_id = ?", (slug,))
+        self.conn.execute(
+            "DELETE FROM document_fts WHERE kind = 'knowledge_page' AND record_id = ?",
+            (slug,),
+        )
         self.conn.execute(
             "INSERT INTO document_fts(kind, record_id, topic_id, title, community, content) "
             "SELECT 'knowledge_page', slug, slug, title, status, summary || char(10) || body "
-            "FROM knowledge_pages WHERE slug = ?", (slug,))
+            "FROM knowledge_pages WHERE slug = ?",
+            (slug,),
+        )
 
     def _rows(self, table: str, column: str, slug: str) -> list[sqlite3.Row]:
         return self.conn.execute(

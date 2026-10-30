@@ -1,14 +1,9 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
-from dataclasses import dataclass
-from html import unescape
 import math
 import re
+from dataclasses import dataclass
+from html import unescape
 from typing import Any
 
 from .embeddings import EmbeddingBackend, build_embedding_backend
@@ -19,7 +14,16 @@ CONTENT_WEIGHT = 1.0
 EXACT_MATCH_BONUS = 1.5
 SNIPPET_WINDOW = 180
 WORD_PATTERN = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]+")
-TAG_PATTERN = re.compile(r"<[^>]+>")
+# Strip a conservative markup subset: bare tags and explicitly assigned
+# attributes. Free-form comparisons (including a<b and flag>0) remain text.
+# Bare a<b>c is inherently ambiguous and is treated as a <b> tag; valueless
+# attributes and malformed markup are retained rather than guessing them away.
+TAG_PATTERN = re.compile(
+    r"</[A-Za-z][A-Za-z0-9:-]*\s*>"
+    r"|<[A-Za-z][A-Za-z0-9:-]*"
+    r"(?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=\s*"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))*\s*/?>"
+)
 SPACE_PATTERN = re.compile(r"\s+")
 
 
@@ -33,6 +37,7 @@ class SearchHit:
     community: str
     dense_score: float
     lexical_score: float
+
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
     if len(left) != len(right):
@@ -58,6 +63,7 @@ def _clean_text(value: Any) -> str:
         text = str(value)
     return SPACE_PATTERN.sub(" ", unescape(TAG_PATTERN.sub(" ", text))).strip()
 
+
 def _get_field(chunk: dict[str, Any], *names: str) -> str:
     for name in names:
         if name in chunk and chunk[name] is not None:
@@ -68,6 +74,7 @@ def _get_field(chunk: dict[str, Any], *names: str) -> str:
             if name in metadata and metadata[name] is not None:
                 return _clean_text(metadata[name])
     return ""
+
 
 def _normalize_text(text: str) -> str:
     return SPACE_PATTERN.sub(" ", text.lower()).strip()
@@ -91,6 +98,7 @@ def tokenize_text(text: str) -> list[str]:
                 tokens.append(token)
                 seen.add(token)
     return tokens
+
 
 def _contains_exact(text: str, token: str) -> bool:
     if not text or not token:
@@ -181,21 +189,37 @@ def _matches_filters(chunk: dict[str, Any], filters: dict[str, Any] | None) -> b
     return True
 
 
-def _find_snippet_start(text: str, query: str) -> int:
+def _first_literal_match_start(text: str, candidates: list[str]) -> int | None:
+    """Find the earliest lowercased literal match, returning an original offset.
+
+    Keep str.lower substring semantics (not re.I or casefold equivalences).
+    Unicode lowercase expansion, such as İ -> i + combining dot, must not
+    shift source offsets. Contextual lowercasing changes sigma's form but not
+    its width, so per-character widths map the full-string lowercase offset.
+    """
     normalized_text = text.lower()
-    query_candidates = [query] + tokenize_text(query)
     starts = [
-        normalized_text.find(candidate.lower())
-        for candidate in query_candidates
-        if candidate
+        normalized_text.find(candidate.lower()) for candidate in candidates if candidate
     ]
-    starts = [start for start in starts if start >= 0]
-    if not starts:
-        return 0
-    return max(min(starts) - 30, 0)
+    start = min((position for position in starts if position >= 0), default=None)
+    if start is None or len(normalized_text) == len(text):
+        return start
+    normalized_offset = 0
+    for original_offset, char in enumerate(text):
+        normalized_offset += len(char.lower())
+        if normalized_offset > start:
+            return original_offset
+    return None
 
 
-def _build_snippet(query: str, chunk: dict[str, Any], max_chars: int = SNIPPET_WINDOW) -> str:
+def _find_snippet_start(text: str, query: str) -> int:
+    start = _first_literal_match_start(text, [query] + tokenize_text(query))
+    return max(start - 30, 0) if start is not None else 0
+
+
+def _build_snippet(
+    query: str, chunk: dict[str, Any], max_chars: int = SNIPPET_WINDOW
+) -> str:
     text = _get_field(chunk, "text", "content", "body", "postContent", "post_content")
     if not text:
         text = _get_field(chunk, "title")
@@ -237,7 +261,12 @@ def hybrid_search(
     candidate_limit = min(len(filtered_chunks), max(top_k * 20, 80))
     candidate_indexes = sorted(
         (index for index in range(len(filtered_chunks)) if lexical_scores[index] > 0),
-        key=lambda index: (lexical_scores[index], _chunk_id(filtered_chunks[index], index, _topic_id(filtered_chunks[index], index))),
+        key=lambda index: (
+            lexical_scores[index],
+            _chunk_id(
+                filtered_chunks[index], index, _topic_id(filtered_chunks[index], index)
+            ),
+        ),
         reverse=True,
     )[:candidate_limit]
 

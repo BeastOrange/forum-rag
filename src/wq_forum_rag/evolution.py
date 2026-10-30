@@ -1,16 +1,21 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
 from typing import Any
 
-from wq_forum_rag.indexer import ForumDatabaseBusyError, ForumIndexService, raise_if_database_locked
-from wq_forum_rag.knowledge import DRAFT, PUBLISHED, KnowledgePage, KnowledgeStore, normalize_slug
+from wq_forum_rag.indexer import (
+    ForumDatabaseBusyError,
+    ForumIndexService,
+    raise_if_database_locked,
+)
+from wq_forum_rag.knowledge import (
+    DRAFT,
+    PUBLISHED,
+    KnowledgePage,
+    KnowledgeStore,
+    normalize_slug,
+)
 from wq_forum_rag.knowledge_quality import quality_issues
 from wq_forum_rag.search_cache import CachedEmbeddingBackend
 from wq_forum_rag.search_records import search_forum_records, search_knowledge_records
@@ -26,7 +31,9 @@ class EvolutionService:
 
     def build_evolution_context(self, query: str, top_k: int = 5) -> dict[str, Any]:
         self._ensure_forum_fresh()
-        knowledge = self.search_knowledge(query, top_k=min(top_k, 5), include_drafts=False)
+        knowledge = self.search_knowledge(
+            query, top_k=min(top_k, 5), include_drafts=False
+        )
         forum = self.search_forum(query, top_k=top_k)
         posts = [self.get_post(item["topic_id"]) for item in forum]
         return {
@@ -61,17 +68,28 @@ class EvolutionService:
             status=DRAFT,
             confidence=confidence,
         )
-        unique_sources = sorted({str(topic_id) for topic_id in source_topic_ids if str(topic_id).strip()})
+        unique_sources = sorted(
+            {str(topic_id) for topic_id in source_topic_ids if str(topic_id).strip()}
+        )
         with KnowledgeStore(self.db_path) as store:
             if not store.topic_ids_exist(unique_sources):
-                raise ValueError("source_topic_ids must reference existing forum topics")
+                raise ValueError(
+                    "source_topic_ids must reference existing forum topics"
+                )
             issues = self._lint_page_payload(page, unique_sources, links or [])
             # A proposal always requires a separate explicit review.
             issues.append(self._issue(page.slug, "block", "review_required"))
             existing = store.get_page(page.slug)
-            if existing and any(link["relation_type"] == "conflicts_with" for link in existing["links"] + existing["backlinks"]):
-                if not any(issue["code"] == "conflict_link_present" for issue in issues):
-                    issues.append(self._issue(page.slug, "block", "conflict_link_present"))
+            if existing and any(
+                link["relation_type"] == "conflicts_with"
+                for link in existing["links"] + existing["backlinks"]
+            ):
+                if not any(
+                    issue["code"] == "conflict_link_present" for issue in issues
+                ):
+                    issues.append(
+                        self._issue(page.slug, "block", "conflict_link_present")
+                    )
             stored = store.upsert_page(
                 page,
                 source_topic_ids=unique_sources,
@@ -93,9 +111,15 @@ class EvolutionService:
             store.conn.execute("BEGIN IMMEDIATE")
             page = store.get_page(slug)
             if page is None:
-                return {"published": False, "slug": slug, "issues": [self._issue(slug, "block", "missing_page")]}
+                return {
+                    "published": False,
+                    "slug": slug,
+                    "issues": [self._issue(slug, "block", "missing_page")],
+                }
             codes = quality_issues(store.conn).get(page["slug"], {"review_required"})
-            blockers = [self._issue(page["slug"], "block", code) for code in sorted(codes)]
+            blockers = [
+                self._issue(page["slug"], "block", code) for code in sorted(codes)
+            ]
             if blockers:
                 return {"published": False, "slug": slug, "issues": blockers}
             published = store.set_status(slug, PUBLISHED, "manual publish")
@@ -103,7 +127,12 @@ class EvolutionService:
             return {"published": True, "page": published}
 
     def review_knowledge_page(
-        self, slug: str, action: str, *, note: str, replacement_slug: str | None = None,
+        self,
+        slug: str,
+        action: str,
+        *,
+        note: str,
+        replacement_slug: str | None = None,
     ) -> dict[str, Any]:
         if action not in {"reviewed", "needs_review", "archived"}:
             raise ValueError("action must be reviewed, needs_review, or archived")
@@ -116,19 +145,36 @@ class EvolutionService:
                 raise ValueError("knowledge page does not exist")
             if replacement_slug:
                 replacement_slug = normalize_slug(replacement_slug)
-                if action != "archived" or replacement_slug == page["slug"] or not store.page_exists(replacement_slug):
-                    raise ValueError("replacement must be another existing page for an archive")
+                if (
+                    action != "archived"
+                    or replacement_slug == page["slug"]
+                    or not store.page_exists(replacement_slug)
+                ):
+                    raise ValueError(
+                        "replacement must be another existing page for an archive"
+                    )
             if action == "reviewed":
-                issues = quality_issues(store.conn).get(page["slug"], {"missing_support"})
+                issues = quality_issues(store.conn).get(
+                    page["slug"], {"missing_support"}
+                )
                 blockers = issues - {"review_required"}
                 if blockers:
-                    raise ValueError("cannot review page: " + ", ".join(sorted(blockers)))
-            store.conn.execute("UPDATE knowledge_pages SET review_status = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?",
-                               ("reviewed" if action == "reviewed" else "needs_review", page["slug"]))
+                    raise ValueError(
+                        "cannot review page: " + ", ".join(sorted(blockers))
+                    )
+            store.conn.execute(
+                "UPDATE knowledge_pages SET review_status = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?",
+                ("reviewed" if action == "reviewed" else "needs_review", page["slug"]),
+            )
             if action == "archived":
                 if replacement_slug:
                     store.link_pages(page["slug"], replacement_slug, "superseded_by")
-                store.set_status(page["slug"], "archived", note + (f"; replacement:{replacement_slug}" if replacement_slug else ""))
+                store.set_status(
+                    page["slug"],
+                    "archived",
+                    note
+                    + (f"; replacement:{replacement_slug}" if replacement_slug else ""),
+                )
             else:
                 store.add_event(page["slug"], f"review:{action}", note)
                 store._sync_fts(page["slug"])
@@ -202,9 +248,14 @@ class EvolutionService:
         try:
             with KnowledgeStore(self.db_path, initialize=False) as store:
                 quality = quality_issues(store.conn)
-                pages = [store.get_page(slug)] if slug else [
-                    store.get_page(page["slug"]) for page in store.list_pages(include_drafts=True)
-                ]
+                pages = (
+                    [store.get_page(slug)]
+                    if slug
+                    else [
+                        store.get_page(page["slug"])
+                        for page in store.list_pages(include_drafts=True)
+                    ]
+                )
         except sqlite3.OperationalError as exc:
             raise_if_database_locked(exc, self.db_path)
             raise
@@ -212,7 +263,12 @@ class EvolutionService:
         for page in [item for item in pages if item]:
             page_issues = self._lint_page_record(page)
             existing_codes = {item["code"] for item in page_issues}
-            page_issues.extend(self._issue(page["slug"], "block", code) for code in sorted(quality.get(page["slug"], {"review_required"}) - existing_codes))
+            page_issues.extend(
+                self._issue(page["slug"], "block", code)
+                for code in sorted(
+                    quality.get(page["slug"], {"review_required"}) - existing_codes
+                )
+            )
             issues.extend(page_issues)
         return {
             "slug": slug,
@@ -221,8 +277,12 @@ class EvolutionService:
             "warning_count": sum(1 for item in issues if item["severity"] == "warn"),
         }
 
-    def graph_query(self, slug: str, *, depth: int = 1, relation_type: str | None = None) -> dict[str, Any]:
-        return WikiService(self.db_path).graph_query(slug, depth=depth, relation_type=relation_type)
+    def graph_query(
+        self, slug: str, *, depth: int = 1, relation_type: str | None = None
+    ) -> dict[str, Any]:
+        return WikiService(self.db_path).graph_query(
+            slug, depth=depth, relation_type=relation_type
+        )
 
     def export_wiki(
         self,
@@ -230,7 +290,9 @@ class EvolutionService:
         *,
         include_drafts: bool = False,
     ) -> dict[str, Any]:
-        return WikiService(self.db_path).export_wiki(output_dir, include_drafts=include_drafts)
+        return WikiService(self.db_path).export_wiki(
+            output_dir, include_drafts=include_drafts
+        )
 
     def _ensure_forum_fresh(self) -> None:
         refresh = ForumIndexService(self.db_path).auto_refresh_if_needed()

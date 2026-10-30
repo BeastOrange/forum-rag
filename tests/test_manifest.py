@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import json
@@ -32,16 +27,25 @@ def test_source_status_is_read_only_until_commit(tmp_path: Path) -> None:
     _write_text(source_dir / "nested" / "beta.txt", "beta\n")
 
     runner = CliRunner()
-    status_result = runner.invoke(app, ["source-status", str(source_dir), "--db", str(db_path)])
+    status_result = runner.invoke(
+        app, ["source-status", str(source_dir), "--db", str(db_path)]
+    )
     assert status_result.exit_code == 0
     status_payload = json.loads(status_result.stdout)
     assert status_payload["dry_run"] is True
-    assert status_payload["counts"] == {"new": 2, "modified": 0, "unchanged": 0, "deleted": 0}
+    assert status_payload["counts"] == {
+        "new": 2,
+        "modified": 0,
+        "unchanged": 0,
+        "deleted": 0,
+    }
 
     with SourceManifestStore(db_path) as store:
         assert store.load_entries(source_dir.resolve()) == {}
 
-    dry_plan_result = runner.invoke(app, ["source-ingest-plan", str(source_dir), "--db", str(db_path)])
+    dry_plan_result = runner.invoke(
+        app, ["source-ingest-plan", str(source_dir), "--db", str(db_path)]
+    )
     assert dry_plan_result.exit_code == 0
     dry_plan_payload = json.loads(dry_plan_result.stdout)
     assert dry_plan_payload["committed"] is False
@@ -60,10 +64,18 @@ def test_source_status_is_read_only_until_commit(tmp_path: Path) -> None:
     assert commit_payload["counts"]["new"] == 2
 
     with SourceManifestStore(db_path) as store:
-        assert set(store.load_entries(source_dir.resolve())) == {"alpha.md", "nested/beta.txt"}
+        assert set(store.load_entries(source_dir.resolve())) == {
+            "alpha.md",
+            "nested/beta.txt",
+        }
 
     unchanged_payload = source_status(str(source_dir), db=str(db_path))
-    assert unchanged_payload["counts"] == {"new": 0, "modified": 0, "unchanged": 2, "deleted": 0}
+    assert unchanged_payload["counts"] == {
+        "new": 0,
+        "modified": 0,
+        "unchanged": 2,
+        "deleted": 0,
+    }
 
 
 def test_source_manifest_detects_modified_deleted_and_new_files(tmp_path: Path) -> None:
@@ -75,31 +87,59 @@ def test_source_manifest_detects_modified_deleted_and_new_files(tmp_path: Path) 
     _write_text(beta_path, "beta v1\n")
 
     first_commit = source_ingest_plan(str(source_dir), db=str(db_path), commit=True)
-    assert first_commit["counts"] == {"new": 2, "modified": 0, "unchanged": 0, "deleted": 0}
+    assert first_commit["counts"] == {
+        "new": 2,
+        "modified": 0,
+        "unchanged": 0,
+        "deleted": 0,
+    }
 
     _write_text(alpha_path, "alpha v2\n")
     beta_path.unlink()
     _write_text(source_dir / "gamma.md", "gamma v1\n")
 
     status_payload = source_status(str(source_dir), db=str(db_path))
-    assert status_payload["counts"] == {"new": 1, "modified": 1, "unchanged": 0, "deleted": 1}
-    assert [item["relative_path"] for item in status_payload["files"]["new"]] == ["gamma.md"]
-    assert [item["relative_path"] for item in status_payload["files"]["modified"]] == ["alpha.md"]
-    assert [item["relative_path"] for item in status_payload["files"]["deleted"]] == ["beta.md"]
+    assert status_payload["counts"] == {
+        "new": 1,
+        "modified": 1,
+        "unchanged": 0,
+        "deleted": 1,
+    }
+    assert [item["relative_path"] for item in status_payload["files"]["new"]] == [
+        "gamma.md"
+    ]
+    assert [item["relative_path"] for item in status_payload["files"]["modified"]] == [
+        "alpha.md"
+    ]
+    assert [item["relative_path"] for item in status_payload["files"]["deleted"]] == [
+        "beta.md"
+    ]
 
     dry_plan = source_ingest_plan(str(source_dir), db=str(db_path), commit=False)
     assert dry_plan["ingest_plan"] == [
         {"relative_path": "gamma.md", "status": "new"},
         {"relative_path": "alpha.md", "status": "modified"},
     ]
-    assert dry_plan["delete_plan"] == [{"relative_path": "beta.md", "status": "deleted"}]
+    assert dry_plan["delete_plan"] == [
+        {"relative_path": "beta.md", "status": "deleted"}
+    ]
 
     second_commit = source_ingest_plan(str(source_dir), db=str(db_path), commit=True)
     assert second_commit["committed"] is True
-    assert second_commit["counts"] == {"new": 1, "modified": 1, "unchanged": 0, "deleted": 1}
+    assert second_commit["counts"] == {
+        "new": 1,
+        "modified": 1,
+        "unchanged": 0,
+        "deleted": 1,
+    }
 
     final_status = source_status(str(source_dir), db=str(db_path))
-    assert final_status["counts"] == {"new": 0, "modified": 0, "unchanged": 2, "deleted": 0}
+    assert final_status["counts"] == {
+        "new": 0,
+        "modified": 0,
+        "unchanged": 2,
+        "deleted": 0,
+    }
 
 
 def test_source_manifest_ignores_binary_and_cache_inputs(tmp_path: Path) -> None:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ALPHAMACHINE_ROOT = ROOT / "AlphaMachine"
 ALPHAMACHINE_MISSING_REASON = "AlphaMachine sources are not present in this checkout"

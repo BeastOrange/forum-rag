@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wq-forum-rag"
-version = "0.1.0"
+version = "0.2.0"
 description = "Offline lightweight RAG and MCP wrapper for forum exports"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,8 +29,22 @@ wq-forum-rag-mcp = "wq_forum_rag.mcp_server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/wq_forum_rag"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+  "src",
+  "scripts",
+  "docs",
+  "README.md",
+  "README_AGENT.md",
+  "pyproject.toml",
+  "uv.lock",
+  "assets",
+]
+exclude = [
+  "tests",
+  "GEMINI.md",
+  "**/__pycache__",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.ruff]
-extend-exclude = ["tests/test_alphamachine_*.py"]

@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import json
@@ -40,7 +35,13 @@ class ForumStore:
         window_size: int = 1_500,
         overlap: int = 200,
     ) -> tuple[dict[str, int], set[str]]:
-        stats = {"seen": 0, "inserted": 0, "updated": 0, "skipped": 0, "chunks_written": 0}
+        stats = {
+            "seen": 0,
+            "inserted": 0,
+            "updated": 0,
+            "skipped": 0,
+            "chunks_written": 0,
+        }
         seen_ids: set[str] = set()
         with self.conn:
             for topic in topics:
@@ -314,7 +315,10 @@ class ForumStore:
                 topic.author,
                 topic.vote_num,
                 topic.comment_count,
-                json.dumps([comment.to_dict() for comment in topic.comments], ensure_ascii=False),
+                json.dumps(
+                    [comment.to_dict() for comment in topic.comments],
+                    ensure_ascii=False,
+                ),
                 topic.content_hash,
             ),
         )

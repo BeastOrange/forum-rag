@@ -1,4 +1,5 @@
 """Start MCP from this checkout using an existing Python environment."""
+
 from __future__ import annotations
 
 import argparse

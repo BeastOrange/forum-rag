@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import sqlite3
@@ -26,13 +21,19 @@ def _print_busy(exc: ForumDatabaseBusyError, **extra: object) -> None:
 def register_evolution_commands(app: typer.Typer) -> None:
     @app.command("evolve-context")
     def context_command(
-        query: str = typer.Argument(..., help="Question to build an evolution context for"),
-        db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+        query: str = typer.Argument(
+            ..., help="Question to build an evolution context for"
+        ),
+        db_path: Path = typer.Option(
+            DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False
+        ),
         top_k: int = typer.Option(5, "--top-k", min=1, max=20),
     ) -> None:
         try:
             console.print_json(
-                data=EvolutionService(db_path).build_evolution_context(query=query, top_k=top_k)
+                data=EvolutionService(db_path).build_evolution_context(
+                    query=query, top_k=top_k
+                )
             )
         except ForumDatabaseBusyError as exc:
             _print_busy(exc, query=query, published_knowledge=[], forum_evidence=[])
@@ -40,7 +41,9 @@ def register_evolution_commands(app: typer.Typer) -> None:
     @app.command("knowledge-search")
     def knowledge_search_command(
         query: str = typer.Argument(..., help="Search published knowledge pages"),
-        db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+        db_path: Path = typer.Option(
+            DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False
+        ),
         top_k: int = typer.Option(5, "--top-k", min=1, max=20),
         include_drafts: bool = typer.Option(False, "--include-drafts"),
         json_output: bool = typer.Option(False, "--json"),
@@ -73,7 +76,9 @@ def register_evolution_commands(app: typer.Typer) -> None:
     @app.command("knowledge-show")
     def knowledge_show_command(
         slug: str = typer.Argument(..., help="Knowledge page slug"),
-        db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+        db_path: Path = typer.Option(
+            DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False
+        ),
     ) -> None:
         try:
             page = EvolutionService(db_path).get_knowledge_page(slug)
@@ -93,7 +98,9 @@ def register_evolution_commands(app: typer.Typer) -> None:
 
     @app.command("knowledge-lint")
     def knowledge_lint_command(
-        db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+        db_path: Path = typer.Option(
+            DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False
+        ),
         slug: str | None = typer.Option(None, "--slug"),
     ) -> None:
         try:
@@ -104,14 +111,18 @@ def register_evolution_commands(app: typer.Typer) -> None:
             try:
                 raise_if_database_locked(exc, db_path)
             except ForumDatabaseBusyError as busy:
-                _print_busy(busy, slug=slug, issues=[], blocking_count=0, warning_count=0)
+                _print_busy(
+                    busy, slug=slug, issues=[], blocking_count=0, warning_count=0
+                )
                 return
             raise
 
     @app.command("knowledge-graph")
     def knowledge_graph_command(
         slug: str = typer.Argument(..., help="Knowledge page slug"),
-        db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+        db_path: Path = typer.Option(
+            DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False
+        ),
         depth: int = typer.Option(1, "--depth", min=0, max=5),
         relation_type: str | None = typer.Option(None, "--relation"),
     ) -> None:
@@ -135,7 +146,9 @@ def register_evolution_commands(app: typer.Typer) -> None:
 
     @app.command("knowledge-export")
     def knowledge_export_command(
-        db_path: Path = typer.Option(DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False),
+        db_path: Path = typer.Option(
+            DEFAULT_DB_PATH, "--db", exists=True, dir_okay=False
+        ),
         output_dir: Path = typer.Option(Path(".cache/wiki"), "--out", file_okay=False),
         include_drafts: bool = typer.Option(False, "--include-drafts"),
     ) -> None:

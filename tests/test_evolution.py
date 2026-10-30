@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import json
@@ -13,6 +8,8 @@ import pytest
 from typer.testing import CliRunner
 
 from wq_forum_rag.cli import app
+from wq_forum_rag.evolution import EvolutionService
+from wq_forum_rag.knowledge import normalize_slug
 from wq_forum_rag.mcp_server import (
     build_evolution_context,
     export_knowledge_wiki,
@@ -22,8 +19,6 @@ from wq_forum_rag.mcp_server import (
     propose_knowledge_page,
     search_knowledge,
 )
-from wq_forum_rag.evolution import EvolutionService
-from wq_forum_rag.knowledge import normalize_slug
 
 
 def _write_fixture(json_path: Path) -> None:
@@ -132,8 +127,16 @@ def test_evolution_context_and_auto_publish_flow(tmp_path: Path) -> None:
         source_topic_ids=["t1", "t2"],
         confidence=0.92,
         source_evidence=[
-            {"topic_id": "t1", "claim": "Test decay", "excerpt": "Alpha decay should be tested"},
-            {"topic_id": "t2", "claim": "Reduce exposure", "excerpt": "Subindustry neutralization can reduce sector exposure"},
+            {
+                "topic_id": "t1",
+                "claim": "Test decay",
+                "excerpt": "Alpha decay should be tested",
+            },
+            {
+                "topic_id": "t2",
+                "claim": "Reduce exposure",
+                "excerpt": "Subindustry neutralization can reduce sector exposure",
+            },
         ],
         db=str(db_path),
     )
@@ -141,7 +144,9 @@ def test_evolution_context_and_auto_publish_flow(tmp_path: Path) -> None:
     assert proposed["auto_published"] is False
     assert proposed["page"]["status"] == "draft"
     service = EvolutionService(db_path)
-    service.review_knowledge_page("alpha/neutralization-decay", "reviewed", note="Evidence checked")
+    service.review_knowledge_page(
+        "alpha/neutralization-decay", "reviewed", note="Evidence checked"
+    )
     assert service.publish_knowledge_page("alpha/neutralization-decay")["published"]
     assert {item["topic_id"] for item in proposed["page"]["sources"]} == {"t1", "t2"}
 
@@ -150,11 +155,22 @@ def test_evolution_context_and_auto_publish_flow(tmp_path: Path) -> None:
 
     page = get_knowledge_page("alpha/neutralization-decay", db=str(db_path))
     assert page["page"]["title"] == "Alpha decay and neutralization"
-    assert lint_knowledge(db=str(db_path), slug="alpha/neutralization-decay")["blocking_count"] == 0
+    assert (
+        lint_knowledge(db=str(db_path), slug="alpha/neutralization-decay")[
+            "blocking_count"
+        ]
+        == 0
+    )
 
     lint_result = CliRunner().invoke(
         app,
-        ["knowledge-lint", "--db", str(db_path), "--slug", "alpha/neutralization-decay"],
+        [
+            "knowledge-lint",
+            "--db",
+            str(db_path),
+            "--slug",
+            "alpha/neutralization-decay",
+        ],
     )
     assert lint_result.exit_code == 0
     assert '"blocking_count": 0' in re.sub(r"\x1b\[[0-9;]*m", "", lint_result.stdout)
@@ -234,7 +250,13 @@ def test_graph_query_and_wiki_export(tmp_path: Path) -> None:
         summary="Neutralization settings should be evaluated with alpha decay evidence.",
         body="Use original forum evidence when deciding whether subindustry neutralization fits.",
         source_topic_ids=["t1"],
-        source_evidence=[{"topic_id": "t1", "claim": "Test decay", "excerpt": "Alpha decay should be tested"}],
+        source_evidence=[
+            {
+                "topic_id": "t1",
+                "claim": "Test decay",
+                "excerpt": "Alpha decay should be tested",
+            }
+        ],
         confidence=0.9,
     )
     service.propose_knowledge_page(
@@ -243,7 +265,13 @@ def test_graph_query_and_wiki_export(tmp_path: Path) -> None:
         summary="Decay checks should preserve original alpha context before comparison.",
         body="Compare decay behavior with cited neutralization evidence before publishing conclusions.",
         source_topic_ids=["t2"],
-        source_evidence=[{"topic_id": "t2", "claim": "Reduce exposure", "excerpt": "Subindustry neutralization can reduce sector exposure"}],
+        source_evidence=[
+            {
+                "topic_id": "t2",
+                "claim": "Reduce exposure",
+                "excerpt": "Subindustry neutralization can reduce sector exposure",
+            }
+        ],
         confidence=0.91,
         links=[
             {
@@ -272,7 +300,9 @@ def test_graph_query_and_wiki_export(tmp_path: Path) -> None:
     assert (output_dir / "log.md").exists()
     assert (output_dir / "hot.md").exists()
 
-    page_text = (output_dir / "alpha" / "decay-checklist.md").read_text(encoding="utf-8")
+    page_text = (output_dir / "alpha" / "decay-checklist.md").read_text(
+        encoding="utf-8"
+    )
     assert "status: published" in page_text
     assert "confidence: 0.910" in page_text
     assert "forum topic `t2`" in page_text
@@ -281,7 +311,14 @@ def test_graph_query_and_wiki_export(tmp_path: Path) -> None:
     runner = CliRunner()
     cli_graph = runner.invoke(
         app,
-        ["knowledge-graph", "alpha/decay-checklist", "--db", str(db_path), "--depth", "1"],
+        [
+            "knowledge-graph",
+            "alpha/decay-checklist",
+            "--db",
+            str(db_path),
+            "--depth",
+            "1",
+        ],
     )
     assert cli_graph.exit_code == 0
     assert "alpha/neutralization-guide" in cli_graph.stdout
@@ -327,11 +364,15 @@ def test_propose_knowledge_page_auto_refreshes_before_topic_validation(
     assert {item["topic_id"] for item in proposed["page"]["sources"]} == {"t3"}
 
 
-def test_empty_database_write_paths_fail_with_domain_errors_not_sqlite(tmp_path: Path) -> None:
+def test_empty_database_write_paths_fail_with_domain_errors_not_sqlite(
+    tmp_path: Path,
+) -> None:
     db_path = tmp_path / "empty.sqlite3"
     db_path.touch()
 
-    with pytest.raises(ValueError, match="source_topic_ids must reference existing forum topics"):
+    with pytest.raises(
+        ValueError, match="source_topic_ids must reference existing forum topics"
+    ):
         EvolutionService(db_path).propose_knowledge_page(
             slug="alpha/test",
             title="Alpha",
@@ -343,9 +384,14 @@ def test_empty_database_write_paths_fail_with_domain_errors_not_sqlite(tmp_path:
 
     publish = EvolutionService(db_path).publish_knowledge_page("alpha/missing")
     assert publish["published"] is False
-    assert publish["issues"] == [{"slug": "alpha/missing", "severity": "block", "code": "missing_page"}]
+    assert publish["issues"] == [
+        {"slug": "alpha/missing", "severity": "block", "code": "missing_page"}
+    ]
 
-    with pytest.raises(ValueError, match="both source_slug and target_slug must reference existing knowledge pages"):
+    with pytest.raises(
+        ValueError,
+        match="both source_slug and target_slug must reference existing knowledge pages",
+    ):
         EvolutionService(db_path).link_knowledge_pages("alpha/a", "alpha/b", "refines")
 
 
@@ -353,5 +399,7 @@ def test_normalize_slug_rejects_path_traversal_segments() -> None:
     with pytest.raises(ValueError, match="slug must not contain path traversal"):
         normalize_slug("alpha/../../escape")
 
-    with pytest.raises(ValueError, match="slug must not contain empty or current-directory segments"):
+    with pytest.raises(
+        ValueError, match="slug must not contain empty or current-directory segments"
+    ):
         normalize_slug("alpha//bad")

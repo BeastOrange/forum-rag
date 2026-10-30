@@ -26,7 +26,7 @@ Choose one environment manager.
 ```bash
 uv sync
 uv run forum-rag --help
-uv run forum-rag ingest-docs Documents   # ingest the 74 official Markdown docs shipped in repo
+uv run forum-rag ingest-docs /path/to/your/markdown-docs   # ingest the user's own Markdown docs (not shipped in repo)
 ```
 
 ### Use Conda
@@ -38,7 +38,7 @@ conda create -n forum-rag python=3.11 pip -y
 conda activate forum-rag
 python -m pip install -e .
 forum-rag --help
-forum-rag ingest-docs Documents
+forum-rag ingest-docs /path/to/your/markdown-docs
 ```
 
 After activation, replace every `uv run forum-rag <command>` below with `forum-rag <command>`, and replace `uv run forum-rag-mcp` with `forum-rag-mcp`. Do not tell a Conda user to install `uv` just to run this project.
@@ -67,50 +67,23 @@ If the user provides an existing SQLite database, do not reindex unless asked. P
 
 ### Upgrading An Existing Install
 
-If the user already had a working MCP setup and just ran `git pull`, perform exactly these steps (all idempotent — safe to run twice):
-
-This release upgrades the official MCP Python SDK from 1.x to 2.x. Synchronize dependencies before restarting the MCP client. The existing SQLite index does not need rebuilding; stdio commands and tool arguments are unchanged.
+For an existing installation, synchronize the environment and inspect the selected index before reconnecting the client:
 
 ```bash
-# 1. Verify you are in the project root
 cd /absolute/path/to/forum-rag
-uv sync
-
-# 2. Ingest the markdown docs shipped in repo.
-#    - New tables `documents` / `doc_chunks` are created lazily; existing
-#      forum tables are untouched.
-#    - Re-runs are skipped per content_hash, no wasted embedding.
-uv run forum-rag ingest-docs Documents
-
-# 3. Ask the user to restart their MCP client (Claude Desktop / Claude Code / Cursor / etc).
-#    The MCP server is a long-lived process spawned at client startup; it
-#    does NOT hot-reload Python code. Without restart, the new tools
-#    search_docs / get_doc / ingest_docs will be invisible to you.
+uv sync --locked
+uv run forum-rag doctor --db .cache/forum.sqlite3
 ```
 
-For an existing Conda installation, activate its environment and use the installed entry point instead:
+For Conda, activate the chosen environment, run `python -m pip install -e .`, and use `forum-rag doctor --db .cache/forum.sqlite3`.
 
-```bash
-conda activate forum-rag
-python -m pip install -e .
-forum-rag ingest-docs Documents
-```
+This upgrade uses the official MCP Python SDK 2.x; the separate `fastmcp` package is not required. Existing stdio commands and tool arguments remain compatible. Batch search additionally accepts optional `compact=True`.
 
-Only rerun `python -m pip install -e .` for a Conda installation when the upgrade changed `pyproject.toml`.
+Do not delete or rebuild an existing forum index for a code upgrade. Only run `ingest-docs <dir>` when the user wants to add or update their own Markdown documentation. Its default pruning removes documents absent from that directory; use `--no-prune` if other imported documents must be retained. Do not re-run forum `refresh` unless source data actually needs updating.
 
-Do NOT attempt these on upgrade — they are not required and may waste time:
+Restart or reconnect the MCP client after updating code/dependencies. The server does not hot-reload. Verify that 22 tools are visible; for an index that already contains official documents, `search_docs("neutralization")` and `get_doc("operators")` should work. Without imported documents, empty document results are expected and do not prove a transport failure. `doctor` checks local structure, not client connectivity or answer accuracy.
 
-- Delete or migrate `forum.sqlite3` — schema additions are backward compatible.
-- Re-run `refresh` on the forum JSON — forum data is untouched by this upgrade.
-
-To **verify** the upgrade succeeded, after the client restart, call:
-
-```text
-search_docs("neutralization")   # must return non-empty results
-get_doc("operators")            # must return a document with full body
-```
-
-If `search_docs` is not in your tool list at all, the client was not restarted, or it points at a different repo path. Tell the user explicitly rather than pretending the tool is unavailable.
+If tools are missing, check the client's executable and working directory. The removed standalone semantic experiment is not required: use `search_forum_batch` with caller-provided bilingual queries instead.
 
 ### MCP Client Configuration
 
@@ -163,7 +136,7 @@ The SQLite database contains **three independent layers**. Keep them straight:
 | --- | --- | --- | --- | --- |
 | Raw forum evidence | `topics` / `chunks` | `search_forum` | Medium (user discussion) | Platform JSON export |
 | Compiled knowledge | `knowledge_pages` / `knowledge_sources` / `knowledge_links` | `search_knowledge` | Medium (AI-distilled, must cite sources) | Produced by you via `propose_knowledge_page` |
-| Official docs | `documents` / `doc_chunks` | `search_docs` | High (authoritative reference) | Markdown files in `Documents/` committed to repo |
+| Official docs | `documents` / `doc_chunks` | `search_docs` | High (authoritative reference) | Markdown files in the user's own docs directory, not committed |
 
 Routing rules:
 
@@ -183,7 +156,8 @@ search_forum_batch(
     query_variants=["缺失值 ts_backfill", "missing values ts_backfill"],
     top_k=6,
     evidence_chars=600,
-    max_evidence_chars=6000
+    max_evidence_chars=6000,
+    compact=True
 )
 ```
 
@@ -205,7 +179,7 @@ get_forum_evidence(
 
 Chunk/document offsets refer to the assembled export text, which includes titles, body text, and comments. They are not raw HTML or individual-comment offsets. Overlapping chunks can repeat text; they do not establish independent supporting sources. A stale hash requires a fresh search. Use `get_post(topic_id)` when the complete thread, individual comments, or broader context is needed.
 
-Search and evidence budgets bound excerpt text, not the complete JSON response or model tokens. Check explicit timeout, lock, degraded-index, and truncation states before drawing conclusions. An empty bounded search does not prove that the forum has no answer. Consider online lookup when local sources are missing, stale, or insufficient; avoid repeating online calls when local evidence already supports the answer.
+Use compact=True to omit duplicated snippet fields while preserving evidence. The two MCP evidence tools share two worker slots: busy means retry later, not no match. Cancellation is cooperative; lock waits may delay cleanup. Search and evidence budgets bound excerpt text, not the complete JSON response or model tokens. Check explicit timeout, lock, degraded-index, and truncation states before drawing conclusions. An empty bounded search does not prove that the forum has no answer. Consider online lookup when local sources are missing, stale, or insufficient; avoid repeating online calls when local evidence already supports the answer.
 
 For exact IDs, URLs, or error strings, `find_by_exact` remains available. For official API/operator definitions, prefer `search_docs`. For compiled knowledge or knowledge-page maintenance, `build_evolution_context` remains the combined knowledge/forum entry.
 
@@ -230,7 +204,7 @@ Use these tools based on the user intent:
 - `link_knowledge_pages(source_slug, target_slug, relation_type, ...)`: add graph relations between knowledge pages.
 - `graph_query(slug, depth=1, relation_type=None)`: inspect related knowledge and backlinks.
 - `export_knowledge_wiki(output_dir=".cache/wiki")`: export Markdown pages for human review.
-- `ingest_docs(directory, rebuild=False, prune=True)`: re-ingest the `Documents/` markdown directory after the user adds or updates `.md` files. Idempotent — unchanged files are skipped per content hash.
+- `ingest_docs(directory, rebuild=False, prune=True)`: re-ingest the user's own Markdown directory after the user adds or updates `.md` files. Idempotent — unchanged files are skipped per content hash.
 - `source_status(source)`: dry-run scan for an external text or Markdown source directory.
 - `source_ingest_plan(source, commit=False)`: inspect or commit a text/Markdown source manifest delta.
 - `rebuild_search_index()`: refresh FTS after bulk indexing or many knowledge-page changes.

@@ -16,7 +16,7 @@ def test_tools_keep_lexical_batch_and_evidence_without_model_entry():
 
 
 def test_cli_help_without_model_libraries():
-    code = '''
+    code = """
 import sys
 def block(event, args):
     if event == 'import' and args[0].split('.')[0] in {'numpy', 'fastembed', 'onnxruntime', 'torch'}:
@@ -29,9 +29,12 @@ assert result.exit_code == 0, result.exception
 assert 'search-batch' in result.stdout
 assert 'forum-evidence' in result.stdout
 assert 'search-semantic' not in result.stdout
-'''
+"""
     result = subprocess.run(
         [sys.executable, "-B", "-c", code],
-        capture_output=True, text=True, timeout=10, env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        env=os.environ.copy(),
     )
     assert result.returncode == 0, result.stderr

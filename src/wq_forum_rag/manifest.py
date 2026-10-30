@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import hashlib
@@ -132,11 +127,19 @@ class SourceManifestStore:
 
     def replace_entries(self, source_root: Path, entries: list[ManifestEntry]) -> None:
         serialized = [
-            (str(source_root), entry.relative_path, entry.sha256, entry.mtime_ns, entry.size)
+            (
+                str(source_root),
+                entry.relative_path,
+                entry.sha256,
+                entry.mtime_ns,
+                entry.size,
+            )
             for entry in entries
         ]
         with self.conn:
-            self.conn.execute("DELETE FROM source_manifest WHERE source_root = ?", (str(source_root),))
+            self.conn.execute(
+                "DELETE FROM source_manifest WHERE source_root = ?", (str(source_root),)
+            )
             if serialized:
                 self.conn.executemany(
                     """
@@ -184,7 +187,9 @@ class SourceManifestService:
     def source_status(self, source: str | Path) -> dict[str, Any]:
         return self._build_payload(source, commit=False, include_plan=False)
 
-    def source_ingest_plan(self, source: str | Path, *, commit: bool = False) -> dict[str, Any]:
+    def source_ingest_plan(
+        self, source: str | Path, *, commit: bool = False
+    ) -> dict[str, Any]:
         return self._build_payload(source, commit=commit, include_plan=True)
 
     def _build_payload(
@@ -210,7 +215,10 @@ class SourceManifestService:
             "committed": commit,
             "counts": {name: len(entries) for name, entries in delta.items()},
             "tracked_files": len(current_entries),
-            "files": {name: [asdict(entry) for entry in entries] for name, entries in delta.items()},
+            "files": {
+                name: [asdict(entry) for entry in entries]
+                for name, entries in delta.items()
+            },
         }
         if include_plan:
             payload["ingest_plan"] = [
