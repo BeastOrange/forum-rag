@@ -231,8 +231,9 @@ def _knowledge_candidate_rows(
     # Filter trust before truncating: many stale/conflicted high-ranking pages
     # must not crowd an eligible page out of the candidate pool. Only identifiers
     # are over-fetched; text scoring remains bounded by top_k.
-    # candidate_ids reserves half its budget for Chinese literal matches. Allow
-    # the FTS half to hold every published identifier before trust filtering.
+    # candidate_ids reserves half its budget for Chinese literal matches. Over-fetch
+    # published identifiers so trust filtering cannot crowd an eligible page out,
+    # but keep the total bounded for very large knowledge bases.
     limit = (
         top_k
         if eligible is None
