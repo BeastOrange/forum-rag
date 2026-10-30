@@ -1,6 +1,7 @@
 .cache/
 .gemini/
 .claude/
+.codegraph/
 .workbuddy-ai/
 .pytest_cache/
 .venv/
