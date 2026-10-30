@@ -1,7 +1,3 @@
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import json
@@ -47,6 +43,9 @@ class CachedEmbeddingBackend:
         return self.embed_documents([text])[0]
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if not self.writable and not self.db_path.exists():
+            # A read-only caller must never create an empty database on the side.
+            return [self.backend.embed_query(text) for text in texts]
         vectors: list[list[float] | None] = []
         misses: list[tuple[int, str, str]] = []
         with closing(sqlite3.connect(self.db_path)) as conn, conn:

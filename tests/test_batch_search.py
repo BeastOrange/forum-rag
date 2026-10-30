@@ -84,6 +84,22 @@ def test_original_literals_apply_to_variants(db):
     assert search_forum_batch(db, "1")["results"][0]["topic_id"] == "1"
 
 
+def test_numeric_query_falls_back_when_not_a_topic_id(tmp_path):
+    path = tmp_path / "numeric.db"
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            """CREATE TABLE topics (topic_id TEXT PRIMARY KEY, title TEXT, community_title TEXT, url TEXT, content_hash TEXT);
+        CREATE TABLE chunks (chunk_id TEXT PRIMARY KEY, topic_id TEXT, chunk_index INTEGER, chunk_level INTEGER, start_offset INTEGER, end_offset INTEGER, content TEXT, content_hash TEXT);"""
+        )
+        conn.execute("INSERT INTO topics VALUES ('7','回填','社区','url/7','topic-7')")
+        conn.execute(
+            "INSERT INTO chunks VALUES ('7#0','7',0,1,10,24,'回填 2024 年数据','hash-7')"
+        )
+    result = search_forum_batch(path, "2024")
+    assert [r["topic_id"] for r in result["results"]] == ["7"]
+    assert search_forum_batch(path, "424242")["results"] == []
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [

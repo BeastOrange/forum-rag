@@ -171,6 +171,7 @@ def search_forum_batch(
     # An empty original query cannot be rescued by variants.
     if not query:
         routes = []
+    lexical_routes = list(routes)
     id_lookup = bool(re.fullmatch(r"\d+", query))
     if id_lookup:
         routes = [query]
@@ -184,15 +185,21 @@ def search_forum_batch(
             index_status = "unavailable"
         elif routes:
             if id_lookup:
-                index_status = "not_used"
                 rows = conn.execute(
                     _SELECT
                     + " WHERE t.topic_id=? AND c.chunk_level=1 ORDER BY c.chunk_index,c.chunk_id LIMIT 1",
                     (query,),
                 ).fetchall()
-                route_lists = [[row["chunk_id"] for row in rows]]
-                route_limits = [1]
-            else:
+                if rows:
+                    index_status = "not_used"
+                    route_lists = [[row["chunk_id"] for row in rows]]
+                    route_limits = [1]
+                else:
+                    # A numeric query that is not a real topic id is still a
+                    # legitimate term, so fall back instead of returning empty.
+                    id_lookup = False
+                    routes = lexical_routes or [query]
+            if not id_lookup:
                 route_lists = []
                 index_status = (
                     "ready"

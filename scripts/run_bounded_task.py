@@ -249,13 +249,22 @@ def run(
         try:
             if process is not None:
                 if task_released:
-                    _stop_group(process.pid, grace, process)
+                    try:
+                        _stop_group(process.pid, grace, process)
+                    except OSError as exc:
+                        # A cleanup failure must not replace the task's own exit
+                        # status; EOF below asks the watchdog to retry instead.
+                        print(f"Process group cleanup failed: {exc}", file=sys.stderr)
+                    else:
+                        cleaned = True
                 else:
                     # The gated wrapper cannot have spawned any task descendants.
                     if process.poll() is None:
                         process.kill()
                     process.wait()
-            cleaned = True
+                    cleaned = True
+            else:
+                cleaned = True
         finally:
             if write_fd is not None:
                 try:

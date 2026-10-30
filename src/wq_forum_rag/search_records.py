@@ -1,7 +1,3 @@
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import sqlite3
@@ -11,6 +7,10 @@ from typing import Any
 from wq_forum_rag.embeddings import EmbeddingBackend, build_embedding_backend
 from wq_forum_rag.search import ForumSearcher
 from wq_forum_rag.search_cache import CachedEmbeddingBackend
+
+# Upper bound on knowledge candidates so a large page count cannot
+# turn a top_k lookup into a full-index scan.
+_MAX_KNOWLEDGE_CANDIDATES = 2_000
 
 
 def search_forum_records(
@@ -236,10 +236,13 @@ def _knowledge_candidate_rows(
     limit = (
         top_k
         if eligible is None
-        else 2
-        * conn.execute(
-            "SELECT COUNT(*) FROM knowledge_pages WHERE status='published'"
-        ).fetchone()[0]
+        else min(
+            2
+            * conn.execute(
+                "SELECT COUNT(*) FROM knowledge_pages WHERE status='published'"
+            ).fetchone()[0],
+            _MAX_KNOWLEDGE_CANDIDATES,
+        )
     )
     ids = candidate_ids(
         conn, query, kind="knowledge_page", limit=limit, include_drafts=include_drafts

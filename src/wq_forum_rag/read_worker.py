@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 
 _slots = threading.BoundedSemaphore(2)
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="forum-read")
+atexit.register(_executor.shutdown, wait=False, cancel_futures=True)
 _cancel_event = ContextVar("forum_read_cancel_event", default=None)
 
 

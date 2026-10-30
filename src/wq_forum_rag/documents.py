@@ -1,7 +1,3 @@
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import re
@@ -357,7 +353,14 @@ def ingest_documents(
                 store.conn.execute("DELETE FROM doc_chunks")
                 store.conn.execute("DELETE FROM documents")
         stats, seen_slugs = store.upsert_documents(iter_documents(directory))
-        pruned = store.prune_missing(seen_slugs) if (prune and not rebuild) else 0
+        # An empty scan usually means a wrong directory, not a request to delete
+        # every stored document. Skipping prune keeps a typo from wiping the index.
+        prune_skipped = bool(prune and not rebuild and not seen_slugs)
+        pruned = (
+            store.prune_missing(seen_slugs)
+            if (prune and not rebuild and seen_slugs)
+            else 0
+        )
         total = store.count()
     return {
         "status": "rebuilt" if rebuild else "ingested",
@@ -365,5 +368,6 @@ def ingest_documents(
         "db": str(db_path),
         "indexed_documents": total,
         "pruned": pruned,
+        "prune_skipped": prune_skipped,
         **stats,
     }

@@ -1,7 +1,3 @@
-# Author: konrad
-# WQ_ID: OB53521
-# Encoding: utf-8
-
 from __future__ import annotations
 
 import json
@@ -167,3 +163,20 @@ def test_ingest_documents_rebuild_clears_state(tmp_path: Path) -> None:
     assert second["status"] == "rebuilt"
     assert second["indexed_documents"] == 2
     assert second["pruned"] == 0
+
+
+def test_ingest_empty_directory_skips_prune(tmp_path: Path) -> None:
+    docs_root = tmp_path / "docs"
+    docs_root.mkdir()
+    _write_docs(docs_root)
+    db_path = tmp_path / "forum.sqlite3"
+    assert ingest_documents(docs_root, db_path)["indexed_documents"] == 3
+
+    empty_root = tmp_path / "empty"
+    empty_root.mkdir()
+    result = ingest_documents(empty_root, db_path)
+
+    assert result["seen"] == 0
+    assert result["prune_skipped"] is True
+    assert result["pruned"] == 0
+    assert result["indexed_documents"] == 3
