@@ -36,6 +36,7 @@ include = [
   "scripts",
   "docs",
   "README.md",
+  "README_zh.md",
   "README_AGENT.md",
   "pyproject.toml",
   "uv.lock",

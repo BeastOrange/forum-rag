@@ -1,400 +1,250 @@
 # forum-rag
 
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%" alt="forum-rag：将研究文档与个人论坛导出本地索引到 SQLite，并通过 CLI 和 MCP 提供可追溯检索与知识沉淀。">
+  <img src="./assets/readme/hero.svg" width="100%" alt="forum-rag indexes research docs and forum data into a local SQLite file and serves traceable retrieval and knowledge pages over a CLI and MCP.">
 </p>
 
 <p align="center">
-  <strong>给 AI 使用的轻量本地检索与证据工具。</strong><br>
-  用 SQLite 保存官方文档、个人论坛导出和知识页，让 AI 先查本地证据，减少反复调用在线论坛 MCP。默认不加载本地模型。
+  <strong>A local retrieval and evidence layer for AI agents.</strong><br>
+  Official docs, forum posts and knowledge pages live in one SQLite file. Agents check local evidence first and call the online forum less.
 </p>
 
 <p align="center">
-  <code>Python 3.11+</code> · <code>SQLite / FTS5</code> · <code>MCP SDK 2.x</code> · 默认无模型
+  <code>Python 3.11+</code> · <code>SQLite / FTS5</code> · <code>MCP SDK 2.x</code> · <code>22 MCP tools</code> · no model by default
 </p>
 
-> **给 AI Agent 的入口：** 若希望 Claude Code、Codex、Gemini CLI 等直接操作本项目，请优先提供 [`README_AGENT.md`](README_AGENT.md)。
+<p align="center">
+  <strong>English</strong> · <a href="README_zh.md">简体中文</a> · <a href="README_AGENT.md">For AI agents</a>
+</p>
 
-## 为什么使用它？
+> If Claude Code, Codex, Gemini CLI or another agent will install or operate this project, hand it [`README_AGENT.md`](README_AGENT.md).
 
-- **离线、轻量、可增量更新。** 不依赖外部检索服务；索引、全文检索、精确查找和 embedding cache 都落在本地 SQLite。
-- **两类来源各自独立。** 你自己准备的官方研究文档与论坛 JSON 共享存储文件，但在表、FTS 类型与 MCP 查询入口上彼此隔离，避免混淆来源。
-- **让检索结果可以沉淀。** Agent 可把有论坛原帖支撑的稳定结论保存成知识页，建立来源绑定、关系图与可导出的 Markdown Wiki，而不是每次从 chunk 临时拼接答案。
+## Features
 
-## 给 AI 的轻量双语检索
+- **Local and light.** Indexing, full-text search, exact lookup and the embedding cache all live in a local SQLite file. No external search service, and no model is loaded by default.
+- **Traceable evidence.** Every hit carries a chunk ID, a content hash and source offsets. One call takes several queries in different languages and returns deduplicated posts with evidence.
+- **Forum sync (0.3.0).** Sync straight from the Support API with your own BRAIN account, incrementally or in full. Auto sync is off until you turn it on.
+- **Separate sources, reusable conclusions.** Docs and forum data use separate tables, FTS kinds and MCP tools. Agents can save conclusions backed by forum posts as knowledge pages, with source bindings, review records, a relation graph and Markdown wiki export.
 
-默认使用本地 SQLite 检索。调用方 AI 提供原问题和中英文关键词，即可一次取回去重后的帖子及证据，不需要准备本地模型：
+## Quick start
 
-```text
-search_forum_batch(
-  query="如何使用 ts_backfill 处理缺失值？",
-  query_variants=["缺失值 ts_backfill", "missing values ts_backfill"],
-  top_k=6,
-  evidence_chars=600,
-  max_evidence_chars=6000,
-  compact=True
-)
-```
-
-工具保留实际命中查询、语言粗标记、片段 ID、内容版本与原文坐标。只在缺少上下文时调用 `get_forum_evidence` 读取该命中的邻块，需要完整讨论再用 `get_post`。语言标记和排序分数不代表事实可信度；本地搜索也不保证两种语言都有相关内容。翻译与问题理解由调用方 AI 完成，工具只执行有界的本地检索。
-
-CLI 使用相同流程：
-
-```bash
-uv run forum-rag search-batch "如何使用 ts_backfill 处理缺失值？" \
-  --variant "缺失值 ts_backfill" --variant "missing values ts_backfill" \
-  --compact --db .cache/forum.sqlite3
-uv run forum-rag forum-evidence "<返回的 chunk_id>" --db .cache/forum.sqlite3 \
-  --expected-content-hash "<返回的 chunk_content_hash>" --max-chars 6000
-```
-
-最多接受三个附加查询；证据字符预算用于控制原文片段长度，不等同于整个 JSON 或 token 数量。调用方应检查超时、锁、索引降级和截断状态，避免将有界未命中解释成论坛没有答案。已有 MCP 客户端需要重启后才能看到新增工具。
-
-## 从零开始：得到第一个结果
-
-### 1. 安装并建立官方文档索引
+**1. Install**
 
 ```bash
 git clone https://github.com/BeastOrange/forum-rag.git
 cd forum-rag
+uv sync                  # needs Python >= 3.11; run `uv python install 3.11` if you have none
 ```
 
-#### 使用 uv
+<details>
+<summary>Using Conda</summary>
 
-```bash
-uv sync
-
-# 项目要求 Python >= 3.11；没有合适版本时先执行：
-# uv python install 3.11
-
-# 必跑：将你自己的 Markdown 文档目录写入默认 SQLite 索引
-# 平台官方文档不随仓库分发，先把导出的 .md 放到任意目录，例如 ./Documents
-uv run forum-rag ingest-docs /path/to/your/markdown-docs
-```
-
-#### 使用 Conda
-
-项目不依赖 `uv` 运行。若你使用 Conda，请在仓库根目录创建 Python 3.11+ 环境，并在该环境中用 `pip` 安装项目：
+The project does not need `uv` at runtime:
 
 ```bash
 conda create -n forum-rag python=3.11 pip -y
 conda activate forum-rag
 python -m pip install -e .
-
-# 必跑：将你自己的 Markdown 文档目录写入默认 SQLite 索引
-forum-rag ingest-docs /path/to/your/markdown-docs
 ```
 
-后续示例以 `uv` 展示。Conda 环境中，将 `uv run forum-rag <command>` 替换为 `forum-rag <command>`，将 `uv run forum-rag-mcp` 替换为 `forum-rag-mcp`。
+With Conda, write `uv run forum-rag …` as `forum-rag …` and `uv run forum-rag-mcp` as `forum-rag-mcp`.
 
-### 2. 搜索一条官方文档
+</details>
 
-```bash
-uv run forum-rag search-docs "neutralization" --top-k 3
-```
+**2. Import docs and search**
 
-完整标题命中优先，因此这个查询优先返回 `Neutralization`；其他文档依词法排序。也可以查看完整内容：
-
-```bash
-uv run forum-rag show-doc neutralization
-```
-
-### 3. （可选）接入你自己的论坛导出
-
-```bash
-uv run forum-rag refresh /path/to/forum-export_YYYYMMDD_HHMMSS.json
-```
-
-完成后，同一 SQLite 文件中同时有官方文档和论坛帖；可使用 `search` / `show` 搜索论坛，也可供 MCP 工具使用。
-
-```bash
-uv run forum-rag search "alpha decay neutralization" --top-k 5
-uv run forum-rag show 12913566170391
-```
-
-默认检索不加载本地模型，也无需安装模型依赖。中英文查询由调用方 AI 提供，可通过 `search_forum_batch` 一次提交。
-
-调用 `search_forum_batch(..., compact=True)` 或 CLI `search-batch --compact` 可省去与 `evidence[].excerpt` 重复的 `snippet`，保留证据文本、版本标识和坐标。默认响应保持兼容。MCP 批量搜索与证据读取共享两个工作名额，满载返回 `busy`；客户端取消后会通知后台查询，线程退出后才释放名额。取消为协作式，数据库锁等待等阻塞操作可能延迟退出。
-
-以下可选依赖仅保留给已有代码层 embedding 后端调用；安装后不会启用独立语义召回，也不会新增 MCP 工具：
-
-```bash
-uv sync --extra local-embeddings
-```
-
-Conda 环境中运行：
-
-```bash
-python -m pip install -e ".[local-embeddings]"
-```
-
-### 4. 同步论坛数据（v0.3.0）
-
-从 0.3.0 起，可以直接用自己的 BRAIN 帐号从 Support 社区 API 拉取论坛帖、评论和 Help Center 文章，写入同一个 SQLite，不再需要先导出 JSON。是否交出帐号、交到什么程度，由你自己选择，下面三种方式都受支持：
-
-| 方式 | 做法 | 本项目是否接触密码 |
-| --- | --- | --- |
-| (a) 导入浏览器插件导出 | 用插件导出论坛 JSON，再运行 `uv run forum-rag refresh <导出>`（见第 3 步） | 不接触，代码永远看不到密码 |
-| (b) 手动同步，每次输入 | 在自己的终端运行 `uv run forum-rag sync`（首次用 `sync --full`），按提示输入帐号和密码 | 只在本次运行的内存中使用，不保存任何内容 |
-| (c) 保存凭据，可选自动同步 | 运行一次 `uv run forum-rag login` 保存凭据，再选择是否开启自动同步 | 保存在系统凭据库（见下文） |
-
-**手动同步（方式 b）。** `forum-rag sync` / `sync-check` 找不到凭据（环境变量、系统凭据库和明文文件里都没有）时，如果运行在交互式终端中，会提示输入用户名和密码（密码不回显），只用于本次运行，结束后不留任何记录。在 MCP 服务、AI 代为执行的 shell 等没有终端的环境中，它不会等待输入，而是立即以 `no_credentials` 失败，并提示你在自己的终端运行 `forum-rag login` 或 `forum-rag sync`。
-
-**保存凭据（方式 c）。** 在自己的终端运行：
-
-```bash
-uv run forum-rag login    # 输入用户名和密码（密码不回显），先在线验证登录，成功后才保存
-uv run forum-rag logout   # 删除已保存的凭据，并关闭自动同步
-```
-
-`login` 只在交互式终端中运行，不接受管道或 AI 工具传入的凭据。登录验证失败时什么都不保存。保存成功后会单独询问“是否开启自动同步”，默认否。保存凭据和开启自动同步是两个独立的选择：可以只保存凭据、继续手动同步。
-
-**凭据保存位置。** `login` 通过 `keyring` 库写入操作系统的凭据库：macOS 钥匙串（Keychain）、Windows 凭据管理器（Credential Manager）、Linux Secret Service（GNOME Keyring / KWallet 等）。无图形界面的 Linux、WSL、Docker 等环境通常没有可用的凭据库，这时 `login` 会先明确警告“将以明文保存”，再把凭据写入 `~/.config/wq-forum-rag/credentials`，文件权限为 0600、目录权限为 0700。以当前用户身份运行的任何程序（包括 AI Agent）都能读取这个文件，介意的话请改用方式 (a) 或 (b)。环境变量 `WQ_FORUM_RAG_CONFIG_DIR` 可以改变这个目录。项目不提供加密文件方案，因为它需要在每次同步时输入口令。密码只用于调用 BRAIN 登录接口，不会写入日志或数据库，登录 cookie 也只保存在进程内存中。
-
-**查找顺序。** 需要登录时依次查找：环境变量 `WQ_BRAIN_USERNAME` / `WQ_BRAIN_PASSWORD`（两个都非空才算），然后是系统凭据库，最后是上面的明文文件。
-
-**环境变量的风险。** 环境变量仍然支持，但同一会话中的其他程序和 AI Agent 都能读到它们。不建议把密码写进 shell profile，也不要写进 MCP 客户端配置的 `env` 块（该配置文件通常是明文，并且常被 AI 读取）。优先使用 `forum-rag login`。
-
-```bash
-uv run forum-rag sync-check   # 只读检查：登录、Support 会话、取一页帖子；不输出凭据
-```
-
-**首次全量构建。** 本地还没有论坛数据，或者希望做一次完整校准时，在自己的终端运行（没有保存凭据时会提示输入）：
-
-```bash
-uv run forum-rag sync --full
-uv run forum-rag sync-status
-```
-
-全量构建会抓取所有社区帖子及评论和全部 Help Center 文章，请求速率约为每秒 3 次，耗时较长。中途中断后重新运行即可续上：评论数没变的帖子不会重复请求评论。只有完整跑完的全量构建才会写入同步水位线，可以用 `sync-status` 确认。
-
-**自动同步（默认关闭）。** 出于隐私考虑，自动同步默认关闭，只有你明确选择后才会开启。开关保存在 `~/.config/wq-forum-rag/settings.json`（`{"auto_sync": true}` 或 `false`，与明文凭据文件同目录，同样受 `WQ_FORUM_RAG_CONFIG_DIR` 影响），对所有数据库和所有 MCP 客户端生效。只有 `login`（按你的回答写入）和 `logout`（写入 `false`）会修改它。生效规则：
-
-1. 环境变量 `WQ_FORUM_RAG_AUTO_SYNC` 非空时优先，双向生效：`0` / `false` / `no` / `off` 关闭（即使 settings.json 为 `true`），其他值（如 `1`）开启（不需要 settings.json）。
-2. 未设置该环境变量（或为空）时，使用 settings.json 中的 `auto_sync`。
-3. 两者都没有时，自动同步关闭。
-
-设置了 `WQ_FORUM_RAG_AUTO_SYNC` 时，`login` / `logout` 的输出会提示环境变量覆盖了保存的选择。开启自动同步仍然需要凭据：没有凭据时 MCP 启动会跳过同步。
-
-开启后，`forum-rag-mcp` 启动时会在后台线程静默运行一次增量同步，不阻塞 MCP 服务，同步期间检索照常可用。触发条件同时满足以下几点：
-
-- 自动同步已开启（见上面的生效规则）；
-- 数据库文件已存在，并且已有同步水位线（完成过 `sync --full`）或导入过论坛导出；
-- 能找到凭据（环境变量、系统凭据库或明文文件）；
-- 距离上次成功同步超过阈值，默认 3 天。
-
-阈值可通过环境变量 `WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` 或启动参数 `forum-rag-mcp --sync-interval-days N` 修改（启动参数优先）。启动时永远不会做全量构建，也永远不会提示输入：没有数据库、没有水位线或没有凭据时只会跳过。同步日志只写到 stderr。
-
-**过期提示。** 论坛数据超过阈值时，`search_forum`、`search_forum_batch` 和 `find_by_exact` 的结果会多一个 `sync_notice` 字段，告诉 AI 数据已过期以及原因：`auto_sync_off`（自动同步未开启）、`no_credentials`（已开启但没有凭据）、`login_failed`（上次登录失败，密码可能已修改）、`sync_running`（后台同步正在进行）、`sync_failed`（上次自动同步没有完成）或 `sync_due`（到期但尚未同步）。字段中包含上次更新时间、天数和建议：在自己的终端运行 `forum-rag sync` 手动更新，或运行 `forum-rag login` 保存凭据并开启自动同步。数据未过期时没有这个字段。MCP 工具数量不变，仍是 22 个。
-
-**手动命令。**
-
-| 目的 | 命令 |
-| --- | --- |
-| 保存凭据并选择是否自动同步 | `uv run forum-rag login` |
-| 删除已保存的凭据并关闭自动同步 | `uv run forum-rag logout` |
-| 增量同步（从水位线前 2 小时开始） | `uv run forum-rag sync` |
-| 全量同步并清理线上已删除的帖子 | `uv run forum-rag sync --full` |
-| 仅在超过阈值时同步 | `uv run forum-rag sync --if-stale --sync-interval-days 3` |
-| 查看水位线、上次结果、凭据来源和备份 | `uv run forum-rag sync-status` |
-| 只读检查登录与 API | `uv run forum-rag sync-check` |
-
-`uv run forum-rag doctor` 的 JSON 中也有 `sync`（自动同步是否开启及来源、水位线、是否过期、上次同步结果）和 `credentials`（是否有凭据、来源为 `env` / `keyring` / `file`、系统凭据库是否可用），只显示来源，不显示用户名或密码。
-
-**备份。** 每次同步写入已有数据库前，会先在 `<数据库目录>/backups` 下用 SQLite 备份接口生成 `<库名>-before-sync-<UTC时间>.sqlite3`。如果上一次同步没有完整跑完（例如 MCP 会话结束时后台同步被中断，或手动运行带 `--max-pages` / `--community` 的同步），并且最新的这类备份晚于最近一次成功同步，就直接复用这份备份，不再重写一份，结果 JSON 中 `backup_reused` 为 `true`。默认只保留 1 份，可用 `--keep-backups N` 或 `WQ_FORUM_RAG_KEEP_BACKUPS` 修改，`0` 表示不备份并删除已有备份。保留规则匹配所有 `<库名>-before-*.sqlite3`，所以升级后的第一次同步（包括 MCP 启动时的静默同步）会把以前手动留下的 `forum-before-*.sqlite3` 删到只剩保留数量。需要保留旧备份时，请先把它们移出该目录，或调大保留数量。磁盘峰值约为数据库本身加上保留份数的备份。
-
-**存储。** API 返回的数据按页处理后直接写库，不生成中间导出文件；唯一的临时文件是备份过程中的 `.partial`，成功后改名，失败时删除。Help Center 文章作为论坛主题存储，社区名为 `Help Center / <分类>`，可以用 `search` / `show` 检索。
-
-**与导出文件并存。** 检索前的导出自动刷新会跳过修改时间早于最近一次同步的导出文件，避免旧导出删掉或覆盖已同步的帖子。比最近一次同步更新的导出仍会自动导入；手动 `refresh <导出>` 不受影响。
-
-**已知限制。**
-
-- 增量同步按帖子的 `updated_at` 倒序挑选帖子，只为这些帖子拉取评论。如果某个帖子有了新评论但 `updated_at` 没变，这条评论可能要等到下一次 `sync --full` 才会入库。规划阶段的抽样检查中，帖子的 `updated_at` 都不早于其最新评论，但 `updated_at` 也会因为评论以外的原因变化，所以这不能证明新评论一定会更新它。
-- 增量同步不会删除线上已删除的帖子；只有不加 `--max-pages` / `--community` 且完整跑完的 `sync --full` 才会清理。被知识页引用的帖子始终保留。
-
-## 数据、分发与边界
-
-| 内容 | 是否随仓库提供 | 用途与获取方式 |
-| --- | --- | --- |
-| 代码、测试、`pyproject.toml` | ✅ | `git clone` 即可获得。 |
-| 你自己的 Markdown 文档目录（示例为 `Documents/`） | ❌ | 由你自行准备并保管，执行 `ingest-docs <目录>` 摄入。平台官方文档不随仓库分发。 |
-| 论坛 SQLite（例如 `.cache/forum.sqlite3`） | ❌ | 由每位用户用自己的平台帐号在本地建立：运行 `sync --full` 从 Support API 拉取，或导出 JSON 后运行 `refresh` / `index`。 |
-
-最小交付物是：**本仓库源码 + 你自己的 Markdown 文档目录 + 你自己的论坛 JSON 或 BRAIN 帐号（`sync --full`）**。仓库不附带平台官方文档，`Documents/` 已被 Git 忽略，首次使用需执行 `ingest-docs <你的目录>`。
-
-如果你选择私下共享已经构建好的 SQLite，对方可以跳过论坛离线索引，只需将 `FORUM_RAG_DB` 指向该文件。请先自行评估相关平台条款及数据分享风险；该数据库默认不应提交到 Git。
-
-## 检索工作流
-
-```text
-自备 Markdown 目录 ─┐
-                  ├─> SQLite / FTS5 候选 ─> 词法排序 / 多查询 RRF ─> CLI / MCP
-个人论坛 JSON ───┘                                                │
-                                                                   └─> 可追溯知识页与 Markdown Wiki
-```
-
-- **论坛索引：** 解析 community、topic、author、时间、投票/评论等轻量元数据，并从 HTML 清洗正文文本。
-- **API 同步：** `sync --full` 从 Support API 全量建库；启用自动同步后，`forum-rag-mcp` 启动时按阈值（默认 3 天）在后台增量同步，按页写入并只重建变更帖子的 FTS 行，检索不中断。
-- **增量更新：** `index` 会根据源 JSON 的路径、mtime 与 size 跳过未变更文件；替换导出或需要强制刷新时使用 `--rebuild`。`refresh` 则把论坛索引和来源 manifest 提交组合为一步。
-- **精确/近邻查询：** `find_by_exact` 面向 topic id、URL、标题、正文、评论与 chunk 的精确词命中；`related_posts` 基于标题寻找同社区相关主题。
-
-首次显式重建论坛索引：
-
-```bash
-uv run forum-rag index \
-  --json /path/to/forum-export_YYYYMMDD_HHMMSS.json \
-  --db .cache/forum.sqlite3 \
-  --rebuild
-```
-
-后续对同一来源的增量索引：
-
-```bash
-uv run forum-rag index \
-  --json /path/to/forum-export_YYYYMMDD_HHMMSS.json \
-  --db .cache/forum.sqlite3
-```
-
-## CLI 速查
-
-| 目的 | 命令 |
-| --- | --- |
-| 查看所有命令 | `uv run forum-rag --help` |
-| 批量双语证据 | `uv run forum-rag search-batch "query" --variant "另一语言关键词" --compact` |
-| 扩展命中证据 | `uv run forum-rag forum-evidence CHUNK_ID --max-chars 6000` |
-| 检查环境与索引 | `uv run forum-rag doctor --db .cache/forum.sqlite3` |
-| 搜索 / 查看论坛 | `uv run forum-rag search "query"` · `uv run forum-rag show TOPIC_ID` |
-| 搜索 / 查看官方文档 | `uv run forum-rag search-docs "query"` · `uv run forum-rag show-doc SLUG` |
-| 文档入库 | `uv run forum-rag ingest-docs <目录>` |
-| 保存 / 删除 BRAIN 凭据 | `uv run forum-rag login` · `uv run forum-rag logout` |
-| 同步论坛（增量 / 全量） | `uv run forum-rag sync` · `uv run forum-rag sync --full` |
-| 按阈值同步 / 查看同步状态 | `uv run forum-rag sync --if-stale` · `uv run forum-rag sync-status` |
-| 检查 BRAIN 登录与 API | `uv run forum-rag sync-check` |
-| 重建 FTS5 索引 | `uv run forum-rag search-reindex` |
-| 查看论坛来源差异 | `uv run forum-rag source-status ./notes` · `uv run forum-rag source-ingest-plan ./notes --commit` |
-| 使用知识层 | `uv run forum-rag <command>`，其中 `<command>` 为 `evolve-context`、`knowledge-search`、`knowledge-show`、`knowledge-lint`、`knowledge-graph` 或 `knowledge-export` |
-
-所有命令均可通过 `--db .cache/forum.sqlite3` 指定索引文件；默认路径也是 `.cache/forum.sqlite3`。
-
-### 可选中文候选索引
-
-中文 bigram 候选索引默认关闭，无需模型或新增依赖。需要 SQLite 3.43 或更新版本；可先在数据库副本上显式构建：
-
-```bash
-uv run forum-rag search-reindex --db /path/to/forum.sqlite3 --chinese
-```
-
-构建后，在 MCP 服务进程的环境中设置 `FORUM_RAG_CHINESE_INDEX=1` 并重新连接客户端，才会启用中文候选路径。取消该环境变量即可恢复原路径；原 FTS 索引仍保留。缺少完整中文索引时沿用原路径，普通查询不会建索引或写库。
-
-该路径要求查询中的每段连续中文在原字段中完整出现，多段按 AND 匹配；英文与代码部分只做字面子串检查，不提供翻译、词边界或语义理解。现有排序公式保持不变，候选仍有数量上限。索引会增加磁盘占用；启用前应核对自己的查询效果，当前不承诺整体准确率提升。
-
-### 官方文档源
-
-按完整标题搜索文档时（例如 `Operators`），完整标题命中优先返回，结果中的 `exact_title_match` 会标明这一点。`score` 保留原检索分数，完整标题以外的结果沿用原排序；分数不是置信概率。
-
-`ingest-docs` 是增量操作：相同内容按 `content_hash` 跳过，默认会 prune 数据库中目录已不存在的文档。
+Official platform docs are not shipped with the repo. Put your exported `.md` files in any directory (for example `./Documents`, which Git ignores), then import them:
 
 ```bash
 uv run forum-rag ingest-docs /path/to/your/markdown-docs
-# 可选：
-#   --rebuild       强制全清重建
-#   --no-prune      保留 DB 中已不存在于目录的文档
+uv run forum-rag search-docs "neutralization" --top-k 3
+uv run forum-rag show-doc neutralization
 ```
 
-文档与论坛在设计上完全隔离：
+**3. Add forum data** (optional; see [Forum data](#forum-data) for the three ways)
 
-- 文档表：`documents` / `doc_chunks`，FTS kind 为 `doc_chunk`
-- 论坛表：`topics` / `chunks`，FTS kind 为 `forum_chunk`
-- MCP 中 `search_docs` 只命中文档，`search_forum` 只命中论坛
-- 两者共享 SQLite 文件与 embedding cache，但不互相污染
+```bash
+uv run forum-rag sync --full                          # full build from the Support API with your BRAIN account
+uv run forum-rag refresh /path/to/forum-export.json   # or import a browser-extension export
+uv run forum-rag search "alpha decay neutralization" --top-k 5
+```
 
-## MCP：让 Agent 使用本地证据
+**4. Connect an MCP client.** See [MCP](#mcp).
 
-服务端默认从 `FORUM_RAG_DB` 获取索引路径，也可在每次工具调用时传入 `db`。
+## Forum data
+
+Forum data comes from a browser-extension export or straight from the Support API. Both land in the same SQLite file. You decide whether to share your account, and how much:
+
+| Mode | How | Does this project see your password? |
+| --- | --- | --- |
+| **Import an export** | Export JSON with the extension, then run `forum-rag refresh <export>` | No |
+| **Manual sync** | Run `forum-rag sync` in your own terminal and type your credentials when asked | Only in memory for that run; nothing is saved |
+| **Saved credentials + auto sync** | Run `forum-rag login` once, then choose whether to enable auto sync | Stored in the OS credential store |
+
+```bash
+uv run forum-rag login         # verifies online, saves on success, then asks about auto sync (default: no)
+uv run forum-rag sync --full   # first full build: all community posts, comments and Help Center articles
+uv run forum-rag sync          # incremental sync, starting 2 hours before the last watermark
+uv run forum-rag sync-status   # watermark, last result, credential source and backups
+uv run forum-rag sync-check    # read-only login and API check; prints no credentials
+uv run forum-rag logout        # delete saved credentials and disable auto sync
+```
+
+A full build makes about 3 requests per second and takes a while. If it stops, run it again to resume; posts whose comment count is unchanged do not refetch comments. Only a full build that finishes writes the sync watermark, which `sync-status` shows.
+
+<details>
+<summary><strong>Credentials: where they are stored and lookup order</strong></summary>
+
+- **Lookup order:** the env vars `WQ_BRAIN_USERNAME` / `WQ_BRAIN_PASSWORD` (both must be non-empty), then the OS credential store, then the plaintext credentials file.
+- **OS credential store:** `login` uses `keyring` to write to the macOS Keychain, Windows Credential Manager or Linux Secret Service (GNOME Keyring, KWallet and others).
+- **Plaintext fallback:** headless Linux, WSL and Docker usually have no credential store. There `login` first warns clearly that it will store plaintext, then writes `~/.config/wq-forum-rag/credentials` with file mode 0600 in a 0700 directory. Any program running as your user, AI agents included, can read that file; if that bothers you, import exports or sync manually instead. `WQ_FORUM_RAG_CONFIG_DIR` changes the directory. There is no encrypted-file option, because it would need a passphrase on every sync.
+- **`login` limits:** it runs only in an interactive terminal and does not accept credentials from pipes or AI tools. It saves nothing if the login check fails. Saving credentials and enabling auto sync are separate choices.
+- **Prompting during manual sync:** when `sync` / `sync-check` find no credentials in an interactive terminal, they prompt for them (the password is not echoed) and use them for that run only. Without a terminal, such as inside the MCP server or a shell run by an AI, they do not wait for input. They fail at once with `no_credentials` and tell you to run `forum-rag login` or `forum-rag sync` in your own terminal.
+- **Env var risk:** other programs and AI agents in the same session can read env vars. Avoid putting them in your shell profile, and keep them out of the `env` block of an MCP client config: that file is usually plaintext and AI agents read it often.
+- **Never persisted:** the password is used only for the BRAIN login call. It is never logged or written to the database. Login cookies live only in process memory.
+
+</details>
+
+<details>
+<summary><strong>Auto sync: how it is enabled and when it runs</strong></summary>
+
+For privacy, auto sync is off by default. The setting lives in `~/.config/wq-forum-rag/settings.json` (`{"auto_sync": true}`), next to the plaintext credentials file, and applies to every database and every MCP client. Only `login` (with your answer) and `logout` (writes `false`) change it.
+
+Precedence:
+
+1. A non-empty `WQ_FORUM_RAG_AUTO_SYNC` wins, in both directions: `0` / `false` / `no` / `off` disable it even if settings.json says `true`; any other value (such as `1`) enables it without settings.json. When it is set, `login` / `logout` say that the env var overrides the saved choice.
+2. Otherwise, the `auto_sync` value in settings.json applies.
+3. With neither, auto sync is off.
+
+When enabled, `forum-rag-mcp` runs one silent incremental sync in a background thread at startup. The server is not blocked, and search keeps working during the sync. All of these must hold:
+
+- auto sync is enabled;
+- the database exists and has a sync watermark (from a finished `sync --full`) or an imported forum export;
+- credentials can be found;
+- the last successful sync is older than the threshold, 3 days by default. Change it with `WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` or the startup flag `--sync-interval-days N`; the flag wins.
+
+Startup never runs a full build and never prompts. It just skips when there is no database, watermark or credentials. Sync logs go to stderr only.
+
+</details>
+
+<details>
+<summary><strong>Stale data notice: <code>sync_notice</code></strong></summary>
+
+When forum data is older than the threshold, results from `search_forum`, `search_forum_batch` and `find_by_exact` carry a `sync_notice` field. It holds the last update time, the age in days, the reason, and a suggestion: run `forum-rag sync` in your own terminal, or run `forum-rag login` to save credentials and enable auto sync. Fresh data has no such field.
+
+| Reason | Meaning |
+| --- | --- |
+| `auto_sync_off` | Auto sync is not enabled |
+| `no_credentials` | Auto sync is on, but no credentials were found |
+| `login_failed` | The last login failed; the password may have changed |
+| `sync_running` | A background sync is running |
+| `sync_failed` | The last auto sync did not finish |
+| `sync_due` | A sync is due but has not run yet |
+
+</details>
+
+<details>
+<summary><strong>Backups and storage</strong></summary>
+
+- **Backups:** before a sync writes to an existing database, it uses the SQLite backup API to create `<db>-before-sync-<UTC time>.sqlite3` under `<db dir>/backups`. One backup is kept by default; change that with `--keep-backups N` or `WQ_FORUM_RAG_KEEP_BACKUPS`. `0` means no backup, and deletes existing ones.
+- **Reusing an unfinished backup:** if the last sync did not finish (for example the MCP session ended during a background sync, or a manual run used `--max-pages` / `--community`) and the newest such backup is later than the last successful sync, that backup is reused instead of written again. The result JSON then has `backup_reused: true`.
+- **Old backups get cleaned:** retention matches every `<db>-before-*.sqlite3`. So the first sync after upgrading, including the silent startup sync, trims older hand-made `forum-before-*.sqlite3` files down to the kept count. Move any you want out of that directory first, or raise the count. Peak disk use is about the database plus the kept backups.
+- **No intermediate files:** API pages are written straight to the database. The only temporary file is the backup's `.partial`, renamed on success and deleted on failure.
+- **Help Center articles:** stored as forum topics in communities named `Help Center / <category>`, and searchable with `search` / `show`.
+- **Living with exports:** the export auto-refresh before searches skips export files older than the last sync, so a stale export cannot delete or overwrite synced posts. Exports newer than the last sync are still imported, and a manual `refresh <export>` always runs.
+
+</details>
+
+**Known limitations**
+
+- Incremental sync picks posts by `updated_at`, newest first, and fetches comments only for those posts. A new comment on a post whose `updated_at` did not change may wait for the next `sync --full`. In a sample checked during planning, no post's `updated_at` was earlier than its newest comment. But `updated_at` also changes for reasons other than comments, so this does not prove a new comment always bumps it.
+- Incremental sync does not remove posts deleted online. Only a `sync --full` that finishes without `--max-pages` / `--community` prunes them. Posts cited by knowledge pages are always kept.
+
+## Bilingual retrieval for agents
+
+The calling AI passes the original question plus keywords in Chinese and English, and gets deduplicated posts with evidence in one call, with no local model:
+
+```text
+search_forum_batch(
+  query="如何使用 ts_backfill 处理缺失值？",
+  query_variants=["缺失值 ts_backfill", "missing values ts_backfill"],
+  top_k=6, evidence_chars=600, max_evidence_chars=6000, compact=True
+)
+```
+
+The CLI follows the same flow:
+
+```bash
+uv run forum-rag search-batch "如何使用 ts_backfill 处理缺失值？" \
+  --variant "缺失值 ts_backfill" --variant "missing values ts_backfill" --compact
+uv run forum-rag forum-evidence "<chunk_id>" \
+  --expected-content-hash "<chunk_content_hash>" --max-chars 6000
+```
+
+- Results keep the matched queries, a rough language tag, chunk IDs, content hashes and source offsets. Use `get_forum_evidence` for neighboring chunks when context is missing, and `get_post` for the full thread.
+- Up to 3 extra queries are accepted. Evidence budgets limit excerpt text only, not the whole JSON or token count.
+- `compact=True` (CLI `--compact`) drops the `snippet` that duplicates `evidence[].excerpt` and keeps evidence text, hashes and offsets. The default response stays compatible.
+- Batch search and evidence reads share 2 worker slots; when both are taken the tools return `busy`. A client cancel signals the background query, and the slot frees once the thread exits. Cancellation is cooperative, so blocking work such as database lock waits can delay the exit.
+- Language tags and scores are not confidence in the facts. Local search does not guarantee relevant posts in both languages; translation and understanding the question are the calling AI's job. Check timeout, lock, degraded-index and truncation states, and do not read a bounded miss as "the forum has no answer".
+
+## MCP
+
+The server reads the index path from `FORUM_RAG_DB`; any tool call can also pass `db`.
 
 ```bash
 export FORUM_RAG_DB=/absolute/path/.cache/forum.sqlite3
 uv run forum-rag-mcp
 ```
 
-Claude Desktop 或其他兼容 MCP 客户端的配置示例：
+Claude Desktop or any MCP-compatible client:
 
 ```json
 {
   "mcpServers": {
     "forum-rag": {
       "command": "uv",
-      "args": [
-        "--directory",
-        "/absolute/path/forum-rag",
-        "run",
-        "forum-rag-mcp"
-      ],
-      "env": {
-        "FORUM_RAG_DB": "/absolute/path/.cache/forum.sqlite3"
-      }
+      "args": ["--directory", "/absolute/path/forum-rag", "run", "forum-rag-mcp"],
+      "env": { "FORUM_RAG_DB": "/absolute/path/.cache/forum.sqlite3" }
     }
   }
 }
 ```
 
-若使用 Conda，图形化 MCP 客户端通常不会先执行 `conda activate`。请将 `command` 直接指向该环境中的 `forum-rag-mcp` 可执行文件：
-
-```json
-{
-  "mcpServers": {
-    "forum-rag": {
-      "command": "/absolute/path/to/miniconda3/envs/forum-rag/bin/forum-rag-mcp",
-      "args": [],
-      "env": {
-        "FORUM_RAG_DB": "/absolute/path/.cache/forum.sqlite3"
-      }
-    }
-  }
-}
-```
-
-Windows 下将可执行文件路径改为 `...\envs\forum-rag\Scripts\forum-rag-mcp.exe`。
+With Conda, GUI clients usually do not run `conda activate` first. Point `command` at the executable in the environment and leave `args` empty: `…/envs/forum-rag/bin/forum-rag-mcp` on macOS/Linux, `…\envs\forum-rag\Scripts\forum-rag-mcp.exe` on Windows.
 
 <details>
-<summary><strong>查看全部 22 个 MCP 工具</strong></summary>
+<summary><strong>All 22 MCP tools</strong></summary>
 
-| 分组 | 工具 |
+| Group | Tools |
 | --- | --- |
-| 论坛检索 | `search_forum(query, db=None, top_k=5)`<br>`get_post(topic_id, db=None)`<br>`find_by_exact(value, db=None, community=None, top_k=5)`<br>`related_posts(topic_id, db=None, top_k=5)` |
-| 批量证据 | `search_forum_batch(query, query_variants=None, db=None, top_k=6, evidence_chars=600, max_evidence_chars=6000, compact=False)`<br>`get_forum_evidence(chunk_id, db=None, before=1, after=1, max_chars=6000, expected_content_hash=None)` |
-| 官方文档 | `search_docs(query, db=None, top_k=5)`<br>`get_doc(slug, db=None)`<br>`ingest_docs(directory, db=None, rebuild=False, prune=True)` |
-| 来源管理 | `source_status(source, db=None)`<br>`source_ingest_plan(source, db=None, commit=False)` |
-| 知识层 | `build_evolution_context(query, db=None, top_k=5)`<br>`propose_knowledge_page(slug, title, summary, body, source_topic_ids, confidence, db=None, links=None, auto_publish=True, source_evidence=None)`<br>`search_knowledge(query, db=None, top_k=5, include_drafts=False)`<br>`get_knowledge_page(slug, db=None)`<br>`link_knowledge_pages(source_slug, target_slug, relation_type, db=None, weight=1.0, confidence=0.8)`<br>`lint_knowledge(db=None, slug=None)`<br>`publish_knowledge_page(slug, db=None)`<br>`graph_query(slug, db=None, depth=1, relation_type=None)`<br>`export_knowledge_wiki(db=None, output_dir=".cache/wiki", include_drafts=False)` |
-| 审核与归档 | `review_knowledge_page(slug, action, note, db=None, replacement_slug=None)` |
-| 维护 | `rebuild_search_index(db=None)` |
+| Forum search | `search_forum(query, db=None, top_k=5)`<br>`get_post(topic_id, db=None)`<br>`find_by_exact(value, db=None, community=None, top_k=5)`<br>`related_posts(topic_id, db=None, top_k=5)` |
+| Batch evidence | `search_forum_batch(query, query_variants=None, db=None, top_k=6, evidence_chars=600, max_evidence_chars=6000, compact=False)`<br>`get_forum_evidence(chunk_id, db=None, before=1, after=1, max_chars=6000, expected_content_hash=None)` |
+| Official docs | `search_docs(query, db=None, top_k=5)`<br>`get_doc(slug, db=None)`<br>`ingest_docs(directory, db=None, rebuild=False, prune=True)` |
+| Sources | `source_status(source, db=None)`<br>`source_ingest_plan(source, db=None, commit=False)` |
+| Knowledge | `build_evolution_context(query, db=None, top_k=5)`<br>`propose_knowledge_page(slug, title, summary, body, source_topic_ids, confidence, db=None, links=None, auto_publish=True, source_evidence=None)`<br>`search_knowledge(query, db=None, top_k=5, include_drafts=False)`<br>`get_knowledge_page(slug, db=None)`<br>`link_knowledge_pages(source_slug, target_slug, relation_type, db=None, weight=1.0, confidence=0.8)`<br>`lint_knowledge(db=None, slug=None)`<br>`publish_knowledge_page(slug, db=None)`<br>`graph_query(slug, db=None, depth=1, relation_type=None)`<br>`export_knowledge_wiki(db=None, output_dir=".cache/wiki", include_drafts=False)` |
+| Review and archive | `review_knowledge_page(slug, action, note, db=None, replacement_slug=None)` |
+| Maintenance | `rebuild_search_index(db=None)` |
 
 </details>
 
-## 自进化知识层：从证据到可复用结论
+## Knowledge layer
 
-知识层不内置外部 LLM API：**MCP 客户端负责阅读、总结和判断；本项目负责存储、证据定位、来源版本校验、审核记录、图谱连边和 lint。** 知识沉淀不会训练或修改模型权重。
+The project calls no LLM API itself. The MCP client reads, summarizes and judges. This project stores pages, locates evidence, checks source versions, records reviews, links pages in a graph and lints them. Saving knowledge never trains or changes model weights.
 
-推荐让 Agent 按以下流程工作：
+1. `build_evolution_context("your question")` returns published knowledge pages first, with full forum evidence.
+2. The agent reads the context and draws stable conclusions.
+3. `propose_knowledge_page(..., source_evidence=[...])` saves a draft. Each evidence item has a `topic_id`, a `claim` and a verbatim `excerpt`; the system records the source's content hash. Older calls still create drafts; `auto_publish` is kept for compatibility but never skips review.
+4. After checking the conclusion, its scope and the excerpts, call `review_knowledge_page(slug, "reviewed", note="...")`, then `publish_knowledge_page(slug)`. An existing source, a located excerpt or a high confidence does not make a conclusion correct; the reviewer judges the support.
+5. Later, `search_knowledge(...)` finds saved knowledge. Fall back to forum search when it is not enough.
 
-1. `build_evolution_context("你的问题")`：优先返回已发布知识页，并附带完整论坛证据。
-2. Agent 阅读上下文，归纳稳定结论。
-3. `propose_knowledge_page(..., source_evidence=[...])`：写入草稿。每项证据包含 `topic_id`、`claim` 和原文中的 `excerpt`；系统保存来源的内容版本。旧调用仍可建草稿，`auto_publish` 参数保留兼容，但不会绕过审核。
-4. 核对结论、适用范围和摘录后，调用 `review_knowledge_page(slug, "reviewed", note="审核说明")`，再调用 `publish_knowledge_page(slug)`。来源存在、摘录存在及高 confidence 都不等于结论正确；支持程度由审核者负责。
-5. 后续用 `search_knowledge(...)` 查找已沉淀内容，必要时再回退到论坛检索。
+<details>
+<summary><strong>Trust rules, archiving and tables</strong></summary>
 
-默认搜索只返回审核通过、来源版本未变、无冲突且依赖有效的已发布知识。旧库没有审核版本的知识先排除，需补证据并重新审核；读取不会自动迁移数据库。新增 `conflicts_with` 会让双方失去可信资格；`depends_on` 的失效会传递给依赖页，`related_to` 不作为依赖。
-
-显式归档：`review_knowledge_page(slug, "archived", note="废弃原因", replacement_slug="替代页")`；替代页可省略。保留历史和来源，不按发布时间或访问次数自动覆盖、删除或改写其他页面。已有归档状态继续使用。
-
-知识页仍写入同一 SQLite，相关表包括：
-
-- `knowledge_pages`：概念、规则、经验等页面
-- `knowledge_sources`：知识页与论坛原帖的来源绑定
-- `knowledge_links`：typed edges / backlink
-- `knowledge_events`：append-only 演化日志
-
-本地检查与导出示例：
+- Default search returns only published pages that are reviewed, whose sources are unchanged, that have no conflicts, and whose dependencies are valid.
+- Pages in older databases without a reviewed version are excluded until they get evidence and a fresh review. Reads never migrate the database.
+- A new `conflicts_with` link makes both pages untrusted. A broken `depends_on` target invalidates the pages that depend on it; `related_to` is not a dependency.
+- Archive with `review_knowledge_page(slug, "archived", note="reason", replacement_slug="replacement")`; the replacement is optional. Archiving keeps history and sources, and never overwrites, deletes or rewrites other pages based on publish time or access counts. Existing archived states stay as they are.
+- Knowledge lives in the same SQLite file: `knowledge_pages` (pages), `knowledge_sources` (bindings to forum posts), `knowledge_links` (typed edges and backlinks) and `knowledge_events` (append-only history).
 
 ```bash
 uv run forum-rag evolve-context "alpha decay neutralization" --top-k 3
@@ -405,75 +255,174 @@ uv run forum-rag knowledge-graph alpha/neutralization-decay --depth 2
 uv run forum-rag knowledge-export --out .cache/wiki
 ```
 
-## 验证检索与回答
+</details>
 
-使用数据库副本运行：
+## CLI reference
+
+Every command takes `--db` to pick the index; the default is `.cache/forum.sqlite3`. Run `uv run forum-rag --help` for the full list.
+
+| Task | Command |
+| --- | --- |
+| Check environment and index (read-only) | `doctor` |
+| Search / show forum posts | `search "query"` · `show TOPIC_ID` |
+| Bilingual batch evidence / expand evidence | `search-batch "query" --variant "…" --compact` · `forum-evidence CHUNK_ID` |
+| Search / show / import docs | `search-docs "query"` · `show-doc SLUG` · `ingest-docs <dir>` |
+| Credentials | `login` · `logout` |
+| Sync the forum | `sync` · `sync --full` · `sync --if-stale --sync-interval-days 3` · `sync-status` · `sync-check` |
+| Import an export | `refresh <export>` · `index --json <export> [--rebuild]` |
+| Rebuild the FTS5 index | `search-reindex [--chinese]` |
+| Source changes | `source-status ./notes` · `source-ingest-plan ./notes --commit` |
+| Knowledge layer | `evolve-context` · `knowledge-search` · `knowledge-show` · `knowledge-lint` · `knowledge-graph` · `knowledge-export` |
+
+## Configuration
+
+| Env var | Purpose | Default |
+| --- | --- | --- |
+| `FORUM_RAG_DB` | Index path used by the MCP server (legacy name `WQ_FORUM_RAG_DB` also works) | `.cache/forum.sqlite3` |
+| `WQ_BRAIN_USERNAME` / `WQ_BRAIN_PASSWORD` | BRAIN credentials, highest priority; prefer `login` because env vars leak easily | unset |
+| `WQ_FORUM_RAG_AUTO_SYNC` | Overrides the saved auto sync setting | unset, so off |
+| `WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` | Staleness threshold for auto sync, in days | `3` |
+| `WQ_FORUM_RAG_KEEP_BACKUPS` | Number of pre-sync backups to keep | `1` |
+| `WQ_FORUM_RAG_CONFIG_DIR` | Directory for settings.json and the plaintext credentials file | `~/.config/wq-forum-rag` |
+| `WQ_FORUM_RAG_AUTO_REFRESH` | Import newer export files before searches; `0` disables | on |
+| `WQ_FORUM_RAG_SOURCE` | Export file or directory to scan for auto-refresh (legacy name `WQ_FORUM_RAG_SOURCE_DIR` also works) | last import location, then the database directory and its parent |
+| `FORUM_RAG_CHINESE_INDEX` | Set to `1` to enable the Chinese candidate index | off |
+
+## Advanced
+
+<details>
+<summary><strong>Docs: incremental import and source isolation</strong></summary>
+
+`ingest-docs` is incremental: documents with the same `content_hash` are skipped, and by default it prunes, removing documents that are no longer in the directory. `--rebuild` clears and rebuilds; `--no-prune` keeps documents that left the directory.
+
+A search for a full title (such as `Operators`) returns the exact title match first and marks it with `exact_title_match`. `score` keeps the raw retrieval score and the other results keep their order; scores are not confidence probabilities.
+
+Docs and forum data are isolated by design:
+
+- Docs use the `documents` / `doc_chunks` tables with FTS kind `doc_chunk`; the forum uses `topics` / `chunks` with FTS kind `forum_chunk`.
+- The MCP tool `search_docs` only hits docs, and `search_forum` only hits the forum.
+- They share the SQLite file and the embedding cache, but their content never mixes.
+
+</details>
+
+<details>
+<summary><strong>Forum exports: indexing and incremental updates</strong></summary>
+
+- Indexing parses light metadata (community, topic, author, time, vote and comment counts) and cleans body text out of HTML.
+- `index` skips source JSON whose path, mtime and size are unchanged. Use `--rebuild` after replacing an export or to force a refresh. `refresh` combines forum indexing and the source manifest commit in one step.
+- `find_by_exact` matches exact terms in topic IDs, URLs, titles, bodies, comments and chunks. `related_posts` finds related topics in the same community by title.
+- Retrieval flow: your Markdown and forum data feed SQLite / FTS5 candidates, which go through lexical ranking and multi-query RRF to the CLI / MCP, and can then become traceable knowledge pages and a Markdown wiki.
+
+```bash
+uv run forum-rag index --json /path/to/forum-export.json --rebuild   # first explicit rebuild
+uv run forum-rag index --json /path/to/forum-export.json             # incremental afterwards
+```
+
+</details>
+
+<details>
+<summary><strong>Chinese candidate index (off by default)</strong></summary>
+
+The Chinese bigram candidate index needs no model or extra dependency, but requires SQLite 3.43 or newer. Build it on a copy of the database first:
+
+```bash
+uv run forum-rag search-reindex --db /path/to/forum.sqlite3 --chinese
+```
+
+Then set `FORUM_RAG_CHINESE_INDEX=1` in the MCP server's environment and reconnect the client to enable it. Unset the variable to return to the original path; the original FTS index is always kept. If the Chinese index is incomplete, the original path is used, and normal queries never build indexes or write to the database.
+
+This path requires every continuous run of Chinese in the query to appear whole in the source field, with multiple runs combined by AND. English and code parts get a literal substring check only: no translation, word boundaries or semantics. The ranking formula is unchanged and candidates are still capped. The index takes extra disk space; check it against your own queries before enabling it. No overall accuracy gain is promised yet.
+
+The optional extra `uv sync --extra local-embeddings` (Conda: `python -m pip install -e ".[local-embeddings]"`) only serves the existing code-level embedding backend. Installing it does not enable separate semantic recall or add MCP tools.
+
+</details>
+
+<details>
+<summary><strong>Evaluating retrieval and answers</strong></summary>
+
+Run on a copy of the database:
 
 ```bash
 PYTHONPATH=src python scripts/evaluate_search.py \
-  --db /path/to/forum-copy.sqlite3 \
-  --transport mcp --repeats 3 --output /tmp/search-report.json
+  --db /path/to/forum-copy.sqlite3 --transport mcp --repeats 3 --output /tmp/search-report.json
 ```
 
-脚本记录语料规模、源码指纹、已知目标召回、无答案误返回和首次/重复调用耗时。默认 60 条检查针对本项目的本地导出构造；它们不是完整的人工相关性标注，不能据此声称通用准确率。请用 `--cases` 提供符合你自己数据的标注。首次调用也不代表操作系统冷缓存。评测输出请保存在本地，不提交生成的报告和日志。
-
-对于 AI 回答，`scripts/evaluate_task_evidence.py` 可核对保存的任务、实际回答、证据和独立判断：
+- It records corpus size, a source fingerprint, recall of known targets, false returns for no-answer queries, and first and repeated call latency.
+- The default 60 checks were built for this project's local export. They are not a complete human relevance set and cannot support a general accuracy claim. Pass labels that fit your data with `--cases`.
+- The first call is not an OS cold cache. Keep reports and logs local; do not commit them.
 
 ```bash
 uv run python scripts/evaluate_task_evidence.py \
-  --runs /path/to/saved-runs.json --judgments /path/to/judgments.json \
-  --output /tmp/task-report.json
+  --runs /path/to/saved-runs.json --judgments /path/to/judgments.json --output /tmp/task-report.json
 ```
 
-输入格式见脚本开头。脚本不会调用 AI 或检索工具；没有保存回答的记录保持未知，拒答与有证据的实质回答分别统计。机器判断不是人工准确率，`needs_online` 也不是实际线上调用节省量。它用于定位失败和复核证据，不替代人工验收。
+- This script checks saved tasks, actual answers, evidence and independent judgments; the input format is at the top of the script. It calls no AI or search tool.
+- Records without a saved answer stay unknown. Refusals and substantive answers with evidence are counted separately.
+- Machine judgments are not human accuracy, and `needs_online` is not the number of online calls saved. Use the script to find failures and review evidence, not as a substitute for human acceptance.
 
-## 检查本地环境
+</details>
 
-运行 `uv run forum-rag doctor --db .cache/forum.sqlite3` 可查看 Python、SQLite、MCP SDK、论坛与文档来源、FTS 索引状态。此命令只读，不创建数据库、不下载模型，也不重建索引。输出为 JSON，附有需要手动执行的修复建议；`ready` 表示本地依赖及至少一种已配置来源的检索结构可用；未导入论坛不影响仅用官方文档。各来源的状态会分别列出，不代表已经验证 MCP 客户端连接或检索准确度。`sync` 字段显示自动同步是否开启及其来源、同步水位线和是否过期；`credentials` 字段显示能否找到 BRAIN 凭据以及来源（`env` / `keyring` / `file`），不显示用户名或密码。
+<details>
+<summary><strong>Process guard for long tasks</strong></summary>
 
-## 维护已有安装
-
-本次升级使用官方 `mcp>=2.3.0,<3`，不需要独立的 `fastmcp` 包。先同步依赖，再重启 MCP 客户端；已有论坛索引无需重建，原 stdio 启动命令和已有参数保持兼容。
-
-```bash
-cd /path/to/forum-rag
-git pull
-uv sync --locked
-uv run forum-rag doctor --db .cache/forum.sqlite3
-```
-
-Conda 环境中执行 `python -m pip install -e .`，再运行 `forum-rag doctor --db .cache/forum.sqlite3`。只有需要新增或更新仓库文档时，才另外执行 `ingest-docs <目录>`；已有论坛数据不需要重新 `refresh`，也不要删除数据库。如果索引还含其他目录导入的文档，摄入时可加 `--no-prune`，保留目录外文档。
-
-升级到 0.3.0 后新增论坛同步（见“同步论坛数据”一节），没有新增 MCP 工具，重启后仍是 22 个。自动同步默认关闭：在自己的终端运行 `uv run forum-rag login` 保存凭据并在提示时选择开启，或设置 `WQ_FORUM_RAG_AUTO_SYNC=1`；不开启时 MCP 启动不会同步，其他功能不受影响，也可以随时手动运行 `forum-rag sync`。注意：升级后的第一次同步会按保留数量（默认 1）清理 `<数据库目录>/backups` 下旧的 `forum-before-*.sqlite3`，需要的旧备份请提前移走。
-
-0.3.0 之前的导入会忽略导出中的 Help Center 文章，所以由旧导出建立的数据库里没有这些文章。增量同步只会补上水位线之后更新过的文章，其余大部分文章要运行一次 `uv run forum-rag sync --full`（或用当前版本重新 `refresh` 一份新导出）才会入库。
-
-然后重启或重新连接 MCP 客户端。服务进程不会热重载代码；重启后应发现 22 个工具。已摄入官方文档时，可调用 `search_docs("neutralization")`、`get_doc("operators")`；有论坛数据时再验证 `search_forum_batch`。工具不可见时，检查客户端是否仍指向旧环境或错误的仓库目录。
-
-如果运行过独立语义检索实验，`search_semantic_forum` 和模型准备、建索引命令已不在当前接口中。改用 `search_forum_batch` 传入中英文查询；既有论坛 SQLite 不依赖实验模型文件。
-
-## 自动化任务的进程保护
-
-长时间运行的测试、评测等自动化任务可通过 `scripts/run_bounded_task.py` 设置租约和时限。调用方先创建租约文件，在仍管理任务时持续更新其修改时间；工作进程不得自行续租。
+`scripts/run_bounded_task.py` adds a lease and a time limit to long-running automated tasks such as tests and evaluations. The caller creates the lease file and keeps updating its mtime while it still manages the task; the worker must never renew its own lease.
 
 ```bash
-# 由调用方创建并续租；此示例本身不会自动续租
-touch /tmp/forum-rag-task.lease
+touch /tmp/forum-rag-task.lease   # created and renewed by the caller; this example does not renew it
 uv run python scripts/run_bounded_task.py \
-  --lease-file /tmp/forum-rag-task.lease --lease-ttl 30 --timeout 600 \
-  -- python -m pytest -q
+  --lease-file /tmp/forum-rag-task.lease --lease-ttl 30 --timeout 600 -- python -m pytest -q
 ```
 
-默认 30 秒无续租，或达到总时限，就停止该任务的整个进程组。停止续租或删除租约可以取消任务；正常结束也会清理遗留子进程。监管进程被强杀时，独立监控进程会通过控制管道断开回收任务组。
+- After 30 seconds without renewal, or at the total time limit, the task's whole process group is stopped. Stopping renewal or deleting the lease cancels the task, and a normal exit also cleans up leftover child processes.
+- If the supervisor is killed, an independent monitor reclaims the task group when the control pipe closes.
+- The lease file must exist and be fresh before start.
+- The tool uses POSIX process groups, works on macOS and Linux, and cannot cover programs that leave their process group on purpose.
 
-租约文件必须在启动前存在且未过期；长任务需要调用方续租。该工具使用 POSIX 进程组，适用于 macOS/Linux，不覆盖主动脱离进程组的程序。
+</details>
 
-## 当前范围与后续方向
+<details>
+<summary><strong>Reading <code>doctor</code> output</strong></summary>
 
-已实现：Support API 全量同步（`sync --full`）、凭据保存（`login` / `logout`，系统凭据库或 0600 明文回退）、默认关闭且需用户开启的 MCP 启动时按阈值后台增量同步、检索结果中的过期提示、本地 JSON 解析、SQLite 原帖与 chunk 索引、Markdown 文档摄入、FTS5 词法检索、双语批量查询与可定位证据、来源 manifest、知识页与来源绑定、typed graph、Wiki 导出、backlink boost 与 embedding cache。
+`uv run forum-rag doctor` is read-only: it creates no database, downloads no model and rebuilds no index. It prints JSON with the state of Python, SQLite, the MCP SDK, forum and doc sources and FTS indexes, plus fixes you can run by hand.
 
-已知限制：旧库中文 LIKE 回退仍可能全表扫描，冷请求或复杂查询可能超时；可选中文索引尚未证明整体质量收益，默认关闭。并发保护目前覆盖 MCP 批量检索和证据读取，不代表全部同步工具都有统一限流。
+- `ready` means local dependencies work and the retrieval structures of at least one configured source are usable. No forum import is needed if you only use docs.
+- Each source is listed separately. The command does not prove that an MCP client can connect, or that retrieval is accurate.
+- `sync` shows whether auto sync is on and where that setting comes from, the watermark, staleness and the last result.
+- `credentials` shows whether credentials were found, their source (`env` / `keyring` / `file`) and whether an OS credential store is available. It never shows the username or password.
 
-暂未实现：真人标注的完整准确率评测、PDF/截图/音频/视频等多模态摄入、常驻后台的定时同步进程（目前只在 MCP 启动时检查一次）、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
+</details>
 
-对外 CLI / MCP contract 与内部 `parser`、`storage`、`search` 模块解耦；后续替换 embedding backend 或调优 chunk/search 策略，不应改变既有 CLI/MCP 接口。
+## Upgrading
+
+```bash
+git pull
+uv sync --locked              # Conda: python -m pip install -e .
+uv run forum-rag doctor
+```
+
+Then restart or reconnect your MCP client. The server does not hot-reload, and after a restart it should list 22 tools. If tools are missing, check whether the client still points at an old environment or the wrong repo directory. With docs imported, try `search_docs("neutralization")` and `get_doc("operators")`; with forum data, also try `search_forum_batch`.
+
+- **No rebuild needed:** existing forum indexes need no rebuild and no new `refresh`, and should never be deleted. The stdio launch command and its arguments stay compatible. The project uses the official `mcp>=2.3.0,<3` and needs no separate `fastmcp` package.
+- **Docs:** run `ingest-docs <dir>` only to add or update docs. If the index holds docs imported from other directories, add `--no-prune` to keep them.
+- **0.3.0:** adds forum sync with no new MCP tools. Auto sync is off by default; without it, MCP startup never syncs and nothing else changes. Note that the first sync after upgrading trims old `forum-before-*.sqlite3` files under `backups` down to the kept count (default 1).
+- **Help Center articles:** imports before 0.3.0 ignored Help Center articles in exports. Incremental sync only adds articles updated after the watermark; for the rest, run `sync --full` once, or `refresh` a new export with the current version.
+- **Semantic search experiment removed:** `search_semantic_forum` and the model preparation and index commands are gone. Use `search_forum_batch` with Chinese and English queries instead. Existing forum SQLite files do not depend on the experiment's model files.
+
+## Data and distribution
+
+| Item | Shipped with the repo | How to get it |
+| --- | --- | --- |
+| Code, tests, `pyproject.toml` | ✅ | `git clone` |
+| Your own Markdown docs | ❌ | Prepare them yourself and import with `ingest-docs <dir>` |
+| Forum SQLite (such as `.cache/forum.sqlite3`) | ❌ | Build it locally with your own account: `sync --full`, or export JSON and run `refresh` / `index` |
+
+If you privately share a built SQLite file, the recipient can skip building and just point `FORUM_RAG_DB` at it. Weigh the platform's terms and the risks of sharing data first. The database should not be committed to Git.
+
+## Scope and limitations
+
+- **Done:** full and incremental Support API sync; saved credentials (OS credential store, or a 0600 plaintext fallback); opt-in background sync at startup; stale data notices; export JSON parsing; SQLite post and chunk index; Markdown doc import; FTS5 lexical search; bilingual batch queries with locatable evidence; source manifest; knowledge pages with source bindings; typed graph; wiki export; backlink boost; embedding cache.
+- **Known limits:** the Chinese LIKE fallback on older databases can still scan whole tables, so cold or complex queries may time out. The optional Chinese index has not yet shown an overall quality gain, so it stays off by default. Concurrency limits cover MCP batch search and evidence reads only; other tools have no shared rate limit.
+- **Not yet:** a full accuracy evaluation with human labels; multimodal import (PDF, screenshots, audio, video); a resident scheduled sync process (startup checks once); LLM-based contradiction detection; external vector databases or seekdb-style service infrastructure.
+- **Later:** query-log-driven backfill. Search snippets cannot be stitched into full source text, and knowledge is never retired just because nobody accessed it.
+
+The public CLI / MCP interface is decoupled from the internal `parser`, `storage` and `search` modules. Swapping the embedding backend or tuning chunking and search should not change the existing CLI / MCP interface.
