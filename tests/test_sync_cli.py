@@ -120,6 +120,9 @@ def test_sync_status_reports_needs_full(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["needs_full"] is True
     assert payload["credentials_configured"] is False
+    assert payload["credentials_source"] is None
+    assert payload["auto_sync_enabled"] is False
+    assert payload["auto_sync_source"] == "env"
     assert payload["backups"] == []
     with sqlite3.connect(db) as conn:
         keys = {row[0] for row in conn.execute("SELECT key FROM schema_meta")}

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from wq_forum_rag import forum_sync
+from wq_forum_rag import forum_sync, user_config
 from wq_forum_rag.cli import app
 from wq_forum_rag.forum_sync import (
     ARTICLES_PATH,
@@ -27,7 +27,11 @@ from wq_forum_rag.forum_sync import (
 from wq_forum_rag.indexer import ForumIndexService
 from wq_forum_rag.knowledge import KnowledgeStore
 from wq_forum_rag.storage import ForumStore
-from wq_forum_rag.support_client import SupportAuthError, SupportNetworkError
+from wq_forum_rag.support_client import (
+    SupportAuthError,
+    SupportCredentials,
+    SupportNetworkError,
+)
 
 NOW = datetime(2026, 11, 7, 12, 0, tzinfo=UTC)
 LATER = NOW + timedelta(days=4)
@@ -765,7 +769,13 @@ def test_settings_helpers(
         monkeypatch.setenv(forum_sync.AUTO_SYNC_ENV, value)
         assert forum_sync.auto_sync_enabled() is True
     monkeypatch.delenv(forum_sync.AUTO_SYNC_ENV)
+    assert forum_sync.auto_sync_enabled() is False
+    user_config.set_auto_sync(True)
     assert forum_sync.auto_sync_enabled() is True
+    monkeypatch.setenv(forum_sync.AUTO_SYNC_ENV, "0")
+    assert forum_sync.auto_sync_enabled() is False
+    monkeypatch.delenv(forum_sync.AUTO_SYNC_ENV)
+    user_config.set_auto_sync(False)
 
     assert forum_sync.resolve_interval_days() == 3.0
     assert forum_sync.resolve_interval_days(0.5) == 0.5
@@ -883,3 +893,55 @@ def test_maybe_start_background_sync_status_matrix(
     _join_sync_threads()
     assert "forum sync failed" in caplog.text
     assert "SECRET" not in caplog.text
+
+
+def test_auto_sync_is_off_by_default_and_follows_the_saved_choice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "forum.sqlite3"
+    ForumStore(db).close()
+    service = FakeService(datetime.now(UTC) - timedelta(days=4))
+
+    def factory(path, *, keep_backups=None):
+        return service
+
+    monkeypatch.delenv(forum_sync.AUTO_SYNC_ENV)
+    monkeypatch.setenv("WQ_BRAIN_USERNAME", "user@example.com")
+    monkeypatch.setenv("WQ_BRAIN_PASSWORD", "not-a-real-password")
+    assert maybe_start_background_sync(db, service_factory=factory)["status"] == (
+        "disabled"
+    )
+    assert service.calls == []
+
+    user_config.set_auto_sync(True)
+    empty = tmp_path / "empty.sqlite3"
+    ForumStore(empty).close()
+    assert maybe_start_background_sync(empty)["status"] == "needs_full"
+    assert maybe_start_background_sync(db, service_factory=factory)["status"] == (
+        "started"
+    )
+    assert service.done.wait(5)
+    _join_sync_threads()
+    assert service.calls == [False]
+
+
+def test_saved_keyring_credentials_feed_the_default_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, memory_keyring
+) -> None:
+    saved = SupportCredentials("ring@example.com", "not-a-real-password")
+    assert user_config.save_to_keyring(saved)
+    seen: list[SupportCredentials] = []
+
+    def fake_client_for(credentials):
+        seen.append(credentials)
+        return object()
+
+    monkeypatch.setattr(forum_sync, "client_for", fake_client_for)
+    forum_sync.default_client_factory()
+    assert seen == [saved]
+
+    monkeypatch.delenv(forum_sync.AUTO_SYNC_ENV)
+    user_config.set_auto_sync(True)
+    db = tmp_path / "forum.sqlite3"
+    ForumStore(db).close()
+    assert maybe_start_background_sync(db)["status"] == "needs_full"

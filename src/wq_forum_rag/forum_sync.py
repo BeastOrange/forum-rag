@@ -24,9 +24,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from wq_forum_rag import parser
+from wq_forum_rag import parser, user_config
 from wq_forum_rag.indexer import (
-    DISABLED_VALUES,
     ForumIndexService,
     database_locked_status,
     is_database_locked,
@@ -35,8 +34,6 @@ from wq_forum_rag.models import Topic
 from wq_forum_rag.search_index import rebuild_search_index, reindex_forum_topics
 from wq_forum_rag.storage import ForumStore
 from wq_forum_rag.support_client import (
-    PASSWORD_ENV,
-    USERNAME_ENV,
     SupportAuthError,
     SupportBlockedError,
     SupportClient,
@@ -45,7 +42,7 @@ from wq_forum_rag.support_client import (
     SupportError,
 )
 
-AUTO_SYNC_ENV = "WQ_FORUM_RAG_AUTO_SYNC"
+AUTO_SYNC_ENV = user_config.AUTO_SYNC_ENV
 INTERVAL_ENV = "WQ_FORUM_RAG_SYNC_INTERVAL_DAYS"
 KEEP_BACKUPS_ENV = "WQ_FORUM_RAG_KEEP_BACKUPS"
 DEFAULT_INTERVAL_DAYS = 3.0
@@ -95,8 +92,8 @@ logger = logging.getLogger("wq_forum_rag.sync")
 
 
 def auto_sync_enabled() -> bool:
-    value = os.environ.get(AUTO_SYNC_ENV, "1").strip().lower()
-    return value not in DISABLED_VALUES
+    """Off unless the user opted in (``forum-rag login`` or the env var)."""
+    return user_config.auto_sync_setting()[0]
 
 
 def resolve_interval_days(value: float | None = None) -> float:
@@ -148,13 +145,16 @@ def resolve_keep_backups(value: int | None = None) -> int:
 
 
 def credentials_configured() -> bool:
-    return bool(
-        os.environ.get(USERNAME_ENV, "").strip() and os.environ.get(PASSWORD_ENV, "")
-    )
+    return user_config.credentials_source() is not None
+
+
+def client_for(credentials: SupportCredentials) -> SupportClient:
+    return SupportClient(credentials)
 
 
 def default_client_factory() -> SupportClient:
-    return SupportClient(SupportCredentials.from_env())
+    """Client from env, keyring or file credentials; never prompts."""
+    return client_for(user_config.require_credentials())
 
 
 # -- normalizers (mirror the reference extension's export mapping) ------------
@@ -365,10 +365,13 @@ class ForumSyncService:
         meta = self._read_meta() if exists else {}
         watermark, source = _watermark_from_meta(meta)
         due_at = watermark + timedelta(days=interval) if watermark else None
+        auto_sync, auto_sync_source = user_config.auto_sync_setting()
+        credentials_source = user_config.credentials_source()
         payload: dict[str, Any] = {
             "db": str(self.db_path),
             "exists": exists,
-            "auto_sync_enabled": auto_sync_enabled(),
+            "auto_sync_enabled": auto_sync,
+            "auto_sync_source": auto_sync_source,
             "interval_days": interval,
             "watermark": _iso(watermark) if watermark else None,
             "watermark_source": source,
@@ -376,7 +379,8 @@ class ForumSyncService:
             "stale": due_at is None or self._now() >= due_at,
             "needs_full": watermark is None,
             "running": self.lock_path.exists(),
-            "credentials_configured": credentials_configured(),
+            "credentials_configured": credentials_source is not None,
+            "credentials_source": credentials_source,
             "keep_backups": self.keep_backups,
             "backups": [
                 {"path": str(path), "size": path.stat().st_size}
