@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="title desc">
-  <title id="title">forum-rag — offline evidence retrieval over your own forum export</title>
+  <title id="title">forum-rag — offline evidence retrieval over your docs and forum data</title>
   <desc id="desc">A cold monochrome spec sheet. Left: the forum-rag wordmark, a two-line promise, and a two-row spec list for runtime and storage. Right: a flat white panel showing one search_forum_batch call — the query and its variant, then two ranked results with their chunk ids and the character offsets that locate each excerpt, the offsets in a slate accent.</desc>
 
   <rect width="1200" height="480" rx="8" fill="#f4f6f7"/>
   <rect x="1" y="1" width="1198" height="478" rx="7" fill="none" stroke="#e3e8eb" stroke-width="1"/>
 
-  <text x="64" y="88" fill="#7a858f" font-size="16" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="2.6">LOCAL EVIDENCE LAYER — V0.2.0</text>
+  <text x="64" y="88" fill="#7a858f" font-size="16" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="2.6">LOCAL EVIDENCE LAYER</text>
   <path d="M64 110H1136" stroke="#d9dfe3" stroke-width="1"/>
 
   <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
     <text x="64" y="212" fill="#0f1316" font-size="80" font-weight="400" letter-spacing="-2.8">forum-rag</text>
-    <text x="64" y="266" fill="#4a535b" font-size="23">Offline retrieval over your own forum export.</text>
+    <text x="64" y="266" fill="#4a535b" font-size="23">Offline retrieval over your docs and forum data.</text>
     <text x="64" y="298" fill="#4a535b" font-size="23">Every hit returns verbatim text with offsets.</text>
   </g>
 
