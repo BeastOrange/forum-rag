@@ -7,7 +7,7 @@ import keyring.backends.fail
 import keyring.errors
 import pytest
 
-from wq_forum_rag import support_client, user_config
+from wq_forum_rag import forum_sync, support_client, user_config
 
 ROOT = Path(__file__).resolve().parents[1]
 ALPHAMACHINE_ROOT = ROOT / "AlphaMachine"
@@ -40,6 +40,7 @@ def _no_network_or_credentials(
         user_config, "_keyring_backend", lambda: keyring.backends.fail.Keyring()
     )
     monkeypatch.setenv("PYTHON_KEYRING_BACKEND", "keyring.backends.fail.Keyring")
+    forum_sync.reset_startup_status()
 
 
 class MemoryKeyring(keyring.backend.KeyringBackend):

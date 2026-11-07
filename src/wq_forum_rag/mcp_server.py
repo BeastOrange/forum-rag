@@ -65,13 +65,28 @@ async def _read_response(
     return {"db": str(db_path), **result}
 
 
+_NO_NOTICE_STATUSES = frozenset({"busy", "timeout", "locked"})
+
+
+def _with_sync_notice(payload: dict[str, Any], db_path: Path) -> dict[str, Any]:
+    """Add ``sync_notice`` when the forum data is older than the sync threshold."""
+    if payload.get("status") in _NO_NOTICE_STATUSES:
+        return payload
+    notice = forum_sync.sync_notice(db_path)
+    if notice is not None:
+        payload["sync_notice"] = notice
+    return payload
+
+
 def search_forum(query: str, db: str | None = None, top_k: int = 5) -> dict[str, Any]:
     db_path = _resolve_db_path(db)
     try:
         results = ForumIndexService(db_path).search(query=query, top_k=top_k)
     except ForumDatabaseBusyError as exc:
         return _busy_payload(exc, query=query, results=[])
-    return {"query": query, "db": str(db_path), "results": results}
+    return _with_sync_notice(
+        {"query": query, "db": str(db_path), "results": results}, db_path
+    )
 
 
 async def search_forum_batch(
@@ -96,9 +111,10 @@ async def search_forum_batch(
         raise TypeError("compact must be a boolean")
     from .batch_search import search_forum_batch as retrieve
 
-    return await _read_response(
+    db_path = _resolve_db_path(db)
+    payload = await _read_response(
         retrieve,
-        _resolve_db_path(db),
+        db_path,
         query,
         error_fields={"query": query, "results": []},
         query_variants=query_variants,
@@ -107,6 +123,7 @@ async def search_forum_batch(
         max_evidence_chars=max_evidence_chars,
         **({"compact": compact} if compact is not False else {}),
     )
+    return _with_sync_notice(payload, db_path)
 
 
 async def get_forum_evidence(
@@ -161,7 +178,9 @@ def find_by_exact(
         )
     except ForumDatabaseBusyError as exc:
         return _busy_payload(exc, value=value, results=[])
-    return {"value": value, "db": str(db_path), "results": results}
+    return _with_sync_notice(
+        {"value": value, "db": str(db_path), "results": results}, db_path
+    )
 
 
 def related_posts(
@@ -680,6 +699,9 @@ def _start_background_sync(argv: list[str]) -> dict[str, Any]:
         )
     except Exception as exc:  # noqa: BLE001 - startup sync must never block serving
         status = {"status": "error", "reason": forum_sync.sanitize_error(exc)}
+        forum_sync.record_startup_status(
+            _resolve_db_path(None), "error", reason=status["reason"]
+        )
         logger.warning("forum sync at startup failed: %s", status["reason"])
         return status
     logger.info("forum sync at startup: %s", status)

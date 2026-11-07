@@ -325,6 +325,18 @@ def _watermark_from_meta(meta: dict[str, str]) -> tuple[datetime | None, str | N
     return None, None
 
 
+def _read_meta_ro(db_path: str | Path) -> dict[str, str]:
+    path = Path(db_path)
+    if not path.is_file():
+        return {}
+    uri = f"{path.resolve().as_uri()}?mode=ro"
+    with contextlib.closing(sqlite3.connect(uri, uri=True)) as conn:
+        if not _table_exists(conn, "schema_meta"):
+            return {}
+        rows = conn.execute("SELECT key, value FROM schema_meta").fetchall()
+    return {str(key): str(value) for key, value in rows}
+
+
 @dataclasses.dataclass
 class _Run:
     full: bool
@@ -366,14 +378,7 @@ class ForumSyncService:
     # -- read-only views ----------------------------------------------------
 
     def _read_meta(self) -> dict[str, str]:
-        if not self.db_path.is_file():
-            return {}
-        uri = f"{self.db_path.resolve().as_uri()}?mode=ro"
-        with contextlib.closing(sqlite3.connect(uri, uri=True)) as conn:
-            if not _table_exists(conn, "schema_meta"):
-                return {}
-            rows = conn.execute("SELECT key, value FROM schema_meta").fetchall()
-        return {str(key): str(value) for key, value in rows}
+        return _read_meta_ro(self.db_path)
 
     def watermark(self) -> datetime | None:
         return _watermark_from_meta(self._read_meta())[0]
@@ -1006,36 +1011,181 @@ def maybe_start_background_sync(
     """Start a silent incremental sync in a daemon thread when one is due."""
     db = Path(db_path)
     base: dict[str, Any] = {"db": str(db)}
-    if not auto_sync_enabled():
-        return {**base, "status": "disabled"}
-    if not db.is_file():
-        return {**base, "status": "no_db"}
-    if not credentials_configured():
-        return {**base, "status": "no_credentials"}
     interval = resolve_interval_days(interval_days)
+
+    def done(payload: dict[str, Any]) -> dict[str, Any]:
+        record_startup_status(
+            db, payload["status"], reason=payload.get("reason"), interval_days=interval
+        )
+        return payload
+
+    if not auto_sync_enabled():
+        return done({**base, "status": "disabled"})
+    if not db.is_file():
+        return done({**base, "status": "no_db"})
+    if not credentials_configured():
+        return done({**base, "status": "no_credentials"})
     factory = service_factory or ForumSyncService
     try:
         service = factory(db, keep_backups=keep_backups)
         watermark = service.watermark()
     except sqlite3.Error as exc:
         if isinstance(exc, sqlite3.OperationalError) and is_database_locked(exc):
-            return {**base, **database_locked_status(db, reason=str(exc))}
+            return done({**base, **database_locked_status(db, reason=str(exc))})
         logger.warning("forum sync check failed: %s", sanitize_error(exc))
-        return {**base, "status": "error", "reason": sanitize_error(exc)}
+        return done({**base, "status": "error", "reason": sanitize_error(exc)})
     if watermark is None:
-        return {**base, "status": "needs_full"}
+        return done({**base, "status": "needs_full"})
     due_at = watermark + timedelta(days=interval)
     if datetime.now(UTC) < due_at:
-        return {**base, "status": "fresh", "due_at": _iso(due_at)}
+        return done({**base, "status": "fresh", "due_at": _iso(due_at)})
 
     def run() -> None:
         try:
             outcome = service.sync(full=False)
         except Exception as exc:  # noqa: BLE001 - a daemon thread must not die loudly
-            logger.warning("forum sync failed: %s", sanitize_error(exc))
+            reason = sanitize_error(exc)
+            record_startup_status(db, "error", reason=reason, interval_days=interval)
+            logger.warning("forum sync failed: %s", reason)
             return
-        logger.info("forum sync finished: %s", outcome.get("status"))
+        status = str(outcome.get("status") or "error")
+        record_startup_status(
+            db, status, reason=outcome.get("reason"), interval_days=interval
+        )
+        logger.info("forum sync finished: %s", status)
 
+    payload = done({**base, "status": "started", "watermark": _iso(watermark)})
     thread = threading.Thread(name="forum-rag-sync", daemon=True, target=run)
     thread.start()
-    return {**base, "status": "started", "watermark": _iso(watermark)}
+    return payload
+
+
+# -- startup state and the search stale notice ----------------------------------
+
+_STARTUP_LOCK = threading.Lock()
+_STARTUP_STATE: dict[str, Any] = {}
+
+_STARTUP_REASONS = {
+    "disabled": "auto_sync_off",
+    "no_credentials": "no_credentials",
+    "auth_failed": "login_failed",
+    "started": "sync_running",
+    "already_running": "sync_running",
+    "fresh": "sync_due",
+    "synced": "sync_due",
+}
+_REASON_TEXT = {
+    "auto_sync_off": "Auto sync is off, so forum-rag-mcp does not update it by itself.",
+    "no_credentials": "Auto sync is on, but no saved BRAIN credentials were found.",
+    "login_failed": "The last BRAIN login failed; the password may have changed.",
+    "sync_running": "A background sync is running now; results may update soon.",
+    "sync_failed": "The last automatic sync did not finish (status: {status}).",
+    "sync_due": "An update is due; auto sync only runs when forum-rag-mcp starts.",
+}
+_DEFAULT_ADVICE = (
+    "Tell the user they can run `forum-rag sync` in their own terminal for a "
+    "manual update, or `forum-rag login` there to save credentials and enable "
+    "auto sync. Never ask for the password in chat."
+)
+_LOGIN_FAILED_ADVICE = (
+    "Tell the user to run `forum-rag login` again in their own terminal (the "
+    "password may have changed), or `forum-rag sync` there for a one-off update. "
+    "Never ask for the password in chat."
+)
+
+
+def _state_key(db_path: str | Path) -> str:
+    return str(Path(db_path).resolve())
+
+
+def record_startup_status(
+    db_path: str | Path,
+    status: str,
+    *,
+    reason: str | None = None,
+    interval_days: float | None = None,
+) -> None:
+    """Remember what MCP startup did with the sync, for the search notice."""
+    key = _state_key(db_path)
+    with _STARTUP_LOCK:
+        if interval_days is None and _STARTUP_STATE.get("db") == key:
+            interval_days = _STARTUP_STATE.get("interval_days")
+        _STARTUP_STATE.clear()
+        _STARTUP_STATE.update(
+            {
+                "db": key,
+                "status": status,
+                "reason": reason,
+                "interval_days": interval_days,
+                "recorded_at": _iso(datetime.now(UTC)),
+            }
+        )
+
+
+def startup_status(db_path: str | Path | None = None) -> dict[str, Any] | None:
+    with _STARTUP_LOCK:
+        if not _STARTUP_STATE:
+            return None
+        if db_path is not None and _STARTUP_STATE.get("db") != _state_key(db_path):
+            return None
+        return dict(_STARTUP_STATE)
+
+
+def reset_startup_status() -> None:
+    with _STARTUP_LOCK:
+        _STARTUP_STATE.clear()
+
+
+def _notice_reason(state: dict[str, Any] | None, meta: dict[str, str]) -> str:
+    if state is not None:
+        return _STARTUP_REASONS.get(str(state.get("status")), "sync_failed")
+    if not auto_sync_enabled():
+        return "auto_sync_off"
+    last = meta.get("sync_last_status")
+    if last == "auth_failed":
+        return "login_failed"
+    if last == "no_credentials":
+        return "no_credentials"
+    return "sync_due"
+
+
+def sync_notice(
+    db_path: str | Path, *, now: datetime | None = None
+) -> dict[str, Any] | None:
+    """A short note for search results when the forum data is stale, else None."""
+    try:
+        meta = _read_meta_ro(db_path)
+    except (sqlite3.Error, OSError):
+        return None
+    watermark, _ = _watermark_from_meta(meta)
+    if watermark is None:
+        return None
+    state = startup_status(db_path)
+    if state is not None and state.get("interval_days") is not None:
+        interval = float(state["interval_days"])
+    else:
+        interval = resolve_interval_days()
+    current = now or datetime.now(UTC)
+    if current < watermark + timedelta(days=interval):
+        return None
+    reason = _notice_reason(state, meta)
+    age_days = round((current - watermark).total_seconds() / 86400, 1)
+    prefix = (
+        f"Forum data is {age_days:g} days old (last update {_iso(watermark)}; "
+        f"threshold {interval:g} days)."
+    )
+    parts = [
+        prefix,
+        _REASON_TEXT[reason].format(status=(state or {}).get("status")),
+    ]
+    if reason == "login_failed":
+        parts.append(_LOGIN_FAILED_ADVICE)
+    elif reason != "sync_running":
+        parts.append(_DEFAULT_ADVICE)
+    return {
+        "reason": reason,
+        "last_update": _iso(watermark),
+        "age_days": age_days,
+        "interval_days": interval,
+        "message": " ".join(parts),
+    }
