@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import argparse
 import functools
 import inspect
+import logging
 import os
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+from . import forum_sync
 from ._version import __version__
 from .cli import DEFAULT_DB_PATH, ForumIndexService
 from .documents import DocumentStore, ingest_documents
@@ -61,13 +65,28 @@ async def _read_response(
     return {"db": str(db_path), **result}
 
 
+_NO_NOTICE_STATUSES = frozenset({"busy", "timeout", "locked"})
+
+
+def _with_sync_notice(payload: dict[str, Any], db_path: Path) -> dict[str, Any]:
+    """Add ``sync_notice`` when the forum data is older than the sync threshold."""
+    if payload.get("status") in _NO_NOTICE_STATUSES:
+        return payload
+    notice = forum_sync.sync_notice(db_path)
+    if notice is not None:
+        payload["sync_notice"] = notice
+    return payload
+
+
 def search_forum(query: str, db: str | None = None, top_k: int = 5) -> dict[str, Any]:
     db_path = _resolve_db_path(db)
     try:
         results = ForumIndexService(db_path).search(query=query, top_k=top_k)
     except ForumDatabaseBusyError as exc:
         return _busy_payload(exc, query=query, results=[])
-    return {"query": query, "db": str(db_path), "results": results}
+    return _with_sync_notice(
+        {"query": query, "db": str(db_path), "results": results}, db_path
+    )
 
 
 async def search_forum_batch(
@@ -92,9 +111,10 @@ async def search_forum_batch(
         raise TypeError("compact must be a boolean")
     from .batch_search import search_forum_batch as retrieve
 
-    return await _read_response(
+    db_path = _resolve_db_path(db)
+    payload = await _read_response(
         retrieve,
-        _resolve_db_path(db),
+        db_path,
         query,
         error_fields={"query": query, "results": []},
         query_variants=query_variants,
@@ -103,6 +123,7 @@ async def search_forum_batch(
         max_evidence_chars=max_evidence_chars,
         **({"compact": compact} if compact is not False else {}),
     )
+    return _with_sync_notice(payload, db_path)
 
 
 async def get_forum_evidence(
@@ -157,7 +178,9 @@ def find_by_exact(
         )
     except ForumDatabaseBusyError as exc:
         return _busy_payload(exc, value=value, results=[])
-    return {"value": value, "db": str(db_path), "results": results}
+    return _with_sync_notice(
+        {"value": value, "db": str(db_path), "results": results}, db_path
+    )
 
 
 def related_posts(
@@ -637,5 +660,54 @@ def build_mcp_server(default_db: str | Path | None = None) -> MCPServer:
 mcp = build_mcp_server()
 
 
+def _start_background_sync(argv: list[str]) -> dict[str, Any]:
+    """Start the silent incremental forum sync; log only to stderr.
+
+    ``-h/--help`` prints usage and exits before any sync is started.
+    """
+    parser = argparse.ArgumentParser(
+        prog="forum-rag-mcp",
+        description="Serve the local forum index over MCP stdio.",
+    )
+    parser.add_argument(
+        "--sync-interval-days",
+        type=float,
+        default=None,
+        help="startup sync threshold in days (default 3)",
+    )
+    parser.add_argument(
+        "--keep-backups",
+        type=int,
+        default=None,
+        help="number of DB backups to keep (default 1)",
+    )
+    args, _ = parser.parse_known_args(argv)
+    logger = logging.getLogger("wq_forum_rag.sync")
+    if not logger.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        # MCPServer already puts a stderr handler on the root logger; stop
+        # propagation so each sync line is written once.
+        logger.propagate = False
+    try:
+        status = forum_sync.maybe_start_background_sync(
+            _resolve_db_path(None),
+            interval_days=args.sync_interval_days,
+            keep_backups=args.keep_backups,
+        )
+    except Exception as exc:  # noqa: BLE001 - startup sync must never block serving
+        status = {"status": "error", "reason": forum_sync.sanitize_error(exc)}
+        forum_sync.record_startup_status(
+            _resolve_db_path(None), "error", reason=status["reason"]
+        )
+        logger.warning("forum sync at startup failed: %s", status["reason"])
+        return status
+    logger.info("forum sync at startup: %s", status)
+    return status
+
+
 def main() -> None:
+    _start_background_sync(sys.argv[1:])
     mcp.run(transport="stdio")

@@ -53,6 +53,10 @@ def diagnose(db_path: str | Path) -> dict:
         "fts_available": False,
         "actions": [],
     }
+    from wq_forum_rag import forum_sync, user_config
+
+    result["sync"] = forum_sync.sync_overview(path)
+    result["credentials"] = user_config.credentials_report()
     if not sdk_ok:
         result["actions"].append("Run uv sync --locked, then restart the MCP client.")
     if not path.is_file():

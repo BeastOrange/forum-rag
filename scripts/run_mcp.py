@@ -16,9 +16,11 @@ def main() -> None:
         parser.error("--db must point to an existing SQLite index")
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
     os.environ["FORUM_RAG_DB"] = str(args.db.resolve())
-    # Serving an existing index does not implicitly authorize ingestion.
-    # An explicit caller environment setting can retain auto-refresh if wanted.
+    # Serving an existing index does not implicitly authorize ingestion or
+    # network sync. An explicit caller environment setting can retain
+    # auto-refresh or auto-sync if wanted.
     os.environ.setdefault("WQ_FORUM_RAG_AUTO_REFRESH", "0")
+    os.environ.setdefault("WQ_FORUM_RAG_AUTO_SYNC", "0")
     from wq_forum_rag.mcp_server import main as serve
 
     serve()

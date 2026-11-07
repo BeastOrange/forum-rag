@@ -59,6 +59,43 @@ def clean_html_to_text(html: str | None) -> str:
     return parser.text()
 
 
+def topic_from_post_record(
+    community_id: str, community_title: str, topic_id: str, record: dict
+) -> Topic:
+    comments = _parse_comments(record.get("comments", {}) or {})
+    return Topic(
+        id=record.get("id", topic_id),
+        community_id=community_id,
+        community_title=community_title,
+        title=record.get("title", ""),
+        body_text=clean_html_to_text(record.get("postContent", "")),
+        url=record.get("url", ""),
+        created_at=record.get("datetime", ""),
+        author=record.get("author", ""),
+        vote_num=record.get("voteNum", 0),
+        comment_count=record.get("commentNum", len(comments)),
+        comments=comments,
+    )
+
+
+def topic_from_article_record(
+    category_id: str, category_title: str, article_id: str, record: dict
+) -> Topic:
+    return Topic(
+        id=record.get("id", article_id),
+        community_id=category_id,
+        community_title=f"Help Center / {category_title}",
+        title=record.get("title", ""),
+        body_text=clean_html_to_text(record.get("articleContent", "")),
+        url=record.get("url", ""),
+        created_at=record.get("createdAt", ""),
+        author=record.get("author", ""),
+        vote_num=record.get("voteNum", 0),
+        comment_count=record.get("commentNum", 0),
+        comments=(),
+    )
+
+
 def iter_topics(json_path: str | Path) -> Iterator[Topic]:
     with Path(json_path).open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
@@ -67,20 +104,19 @@ def iter_topics(json_path: str | Path) -> Iterator[Topic]:
         community_title = community.get("title", "")
         topics = community.get("topics", {}) or {}
         for topic_id, topic_data in topics.items():
-            comments = _parse_comments(topic_data.get("comments", {}) or {})
-            yield Topic(
-                id=topic_data.get("id", topic_id),
-                community_id=community_id,
-                community_title=community_title,
-                title=topic_data.get("title", ""),
-                body_text=clean_html_to_text(topic_data.get("postContent", "")),
-                url=topic_data.get("url", ""),
-                created_at=topic_data.get("datetime", ""),
-                author=topic_data.get("author", ""),
-                vote_num=topic_data.get("voteNum", 0),
-                comment_count=topic_data.get("commentNum", len(comments)),
-                comments=comments,
+            yield topic_from_post_record(
+                community_id, community_title, topic_id, topic_data
             )
+
+    for category_id, category in (payload.get("byCategory", {}) or {}).items():
+        category_title = category.get("title", "")
+        sections = category.get("sections", {}) or {}
+        for section in sections.values():
+            articles = (section or {}).get("articles", {}) or {}
+            for article_id, article in articles.items():
+                yield topic_from_article_record(
+                    category_id, category_title, article_id, article
+                )
 
 
 def build_chunks(

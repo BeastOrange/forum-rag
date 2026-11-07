@@ -5,6 +5,7 @@ import re
 import sqlite3
 import threading
 from collections import OrderedDict
+from collections.abc import Iterable
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -83,6 +84,47 @@ def rebuild_search_index(
     with closing(sqlite3.connect(db_or_conn)) as conn, conn:
         conn.row_factory = sqlite3.Row
         return _rebuild_with_conn(conn, chinese=chinese)
+
+
+_REINDEX_BATCH = 500
+_FORUM_FTS_SELECT = (
+    "SELECT 'forum_chunk', c.chunk_id, c.topic_id, t.title, t.community_title, c.content "
+    "FROM chunks c JOIN topics t ON t.topic_id=c.topic_id "
+    "WHERE c.chunk_level=1 AND t.topic_id IN ({placeholders})"
+)
+
+
+def reindex_forum_topics(conn: sqlite3.Connection, topic_ids: Iterable[str]) -> int:
+    """Refresh forum FTS rows for these topics inside the caller's transaction."""
+    if not _table_exists(conn, "document_fts"):
+        return 0
+    ids = list(dict.fromkeys(str(topic_id) for topic_id in topic_ids))
+    sync_chinese = chinese_index.table_exists(conn, "chinese_fts_v2")
+    inserted = 0
+    for start in range(0, len(ids), _REINDEX_BATCH):
+        batch = ids[start : start + _REINDEX_BATCH]
+        placeholders = ",".join("?" for _ in batch)
+        conn.execute(
+            "DELETE FROM document_fts WHERE kind='forum_chunk' "
+            f"AND topic_id IN ({placeholders})",
+            batch,
+        )
+        rows = [
+            tuple(row)
+            for row in conn.execute(
+                _FORUM_FTS_SELECT.format(placeholders=placeholders), batch
+            ).fetchall()
+        ]
+        if rows:
+            conn.executemany(
+                "INSERT INTO document_fts(kind, record_id, topic_id, title, community, content) VALUES (?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+        if sync_chinese:
+            chinese_index.delete_forum_topics(conn, batch)
+            chinese_index.insert_rows(conn, rows)
+        inserted += len(rows)
+    return inserted
 
 
 def fts_candidates(

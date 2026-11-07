@@ -233,3 +233,81 @@ def test_documents_without_sdk_and_with_invalid_fts(tmp_path, monkeypatch):
     assert report["status"] == "unavailable"
     assert report["fts_available"] is False
     assert "FTS" in report["reason"]
+
+
+PASSWORD = "dummy-not-a-password"
+
+
+def test_missing_database_reports_sync_and_credentials(tmp_path):
+    path = tmp_path / "missing.sqlite3"
+    report = diagnose(path)
+    assert report["credentials"]["available"] is False
+    assert report["credentials"]["source"] is None
+    assert report["credentials"]["keyring_available"] is False
+    assert report["sync"]["watermark"] is None
+    assert report["sync"]["needs_full"] is True
+    assert report["sync"]["auto_sync_enabled"] is False
+    assert report["sync"]["auto_sync_source"] == "env"
+    assert not path.exists()
+
+
+def test_env_credentials_are_reported_without_values(tmp_path, monkeypatch):
+    monkeypatch.setenv("WQ_BRAIN_USERNAME", "secret-user@example.com")
+    monkeypatch.setenv("WQ_BRAIN_PASSWORD", PASSWORD)
+    report = diagnose(tmp_path / "missing.sqlite3")
+    assert report["credentials"]["source"] == "env"
+    assert report["credentials"]["available"] is True
+    dumped = json.dumps(report)
+    assert PASSWORD not in dumped
+    assert "secret-user@example.com" not in dumped
+
+
+def test_keyring_and_file_credentials_are_reported(tmp_path, memory_keyring):
+    from wq_forum_rag import user_config
+    from wq_forum_rag.support_client import SupportCredentials
+
+    credentials = SupportCredentials("user@example.com", PASSWORD)
+    user_config.save_to_file(credentials)
+    assert diagnose(tmp_path / "x.sqlite3")["credentials"]["source"] == "file"
+    assert user_config.save_to_keyring(credentials)
+    report = diagnose(tmp_path / "x.sqlite3")
+    assert report["credentials"]["source"] == "keyring"
+    assert report["credentials"]["keyring_available"] is True
+    assert PASSWORD not in json.dumps(report)
+
+
+def test_stale_sync_is_reported(tmp_path):
+    path = tmp_path / "index.sqlite3"
+    with ForumStore(path) as store, store.conn:
+        store.conn.executemany(
+            "INSERT INTO schema_meta(key, value) VALUES (?, ?)",
+            [
+                ("sync_last_success_at", "2020-01-01T00:00:00Z"),
+                ("sync_last_status", "auth_failed"),
+                ("sync_last_attempt_at", "2020-01-02T00:00:00Z"),
+            ],
+        )
+    sync = diagnose(path)["sync"]
+    assert sync["stale"] is True
+    assert sync["needs_full"] is False
+    assert sync["watermark"] == "2020-01-01T00:00:00Z"
+    assert sync["watermark_source"] == "sync"
+    assert sync["last_status"] == "auth_failed"
+    assert sync["last_attempt_at"] == "2020-01-02T00:00:00Z"
+
+
+def test_invalid_database_reports_sync_error(tmp_path):
+    path = tmp_path / "bad.sqlite3"
+    path.write_bytes(b"not a database")
+    report = diagnose(path)
+    assert report["status"] == "error"
+    assert report["sync"]["error"]
+    assert path.read_bytes() == b"not a database"
+
+
+def test_doctor_cli_includes_sync_and_credentials(tmp_path):
+    result = CliRunner().invoke(app, ["doctor", "--db", str(tmp_path / "x.sqlite3")])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert "sync" in payload
+    assert "credentials" in payload

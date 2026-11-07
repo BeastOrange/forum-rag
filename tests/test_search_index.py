@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import sqlite3
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
+from wq_forum_rag import chinese_index
 from wq_forum_rag.cli import app
 from wq_forum_rag.evolution import EvolutionService
 from wq_forum_rag.search_cache import embedding_cache_count
-from wq_forum_rag.search_index import fts_candidates, rebuild_search_index
+from wq_forum_rag.search_index import (
+    fts_candidates,
+    rebuild_search_index,
+    reindex_forum_topics,
+)
 from wq_forum_rag.search_records import search_forum_records
 from wq_forum_rag.storage import ForumStore
 
@@ -166,3 +173,81 @@ def test_fallback_without_fts_still_returns_results(
         )
 
     assert results[0]["topic_id"] in {"t1", "t2"}
+
+
+def _replace_t1(db_path: Path, *, title: str, body: str) -> ForumStore:
+    store = ForumStore(db_path)
+    topic = store.get_topic("t1")
+    assert topic is not None
+    store.upsert_topics(
+        [dataclasses.replace(topic, title=title, body_text=body, content_hash="")]
+    )
+    return store
+
+
+def _fts_rows(conn: sqlite3.Connection, topic_id: str) -> list[tuple]:
+    return conn.execute(
+        "SELECT rowid, kind, record_id, title, community, content FROM document_fts "
+        "WHERE topic_id=? ORDER BY rowid",
+        (topic_id,),
+    ).fetchall()
+
+
+def test_reindex_forum_topics_refreshes_only_changed_topics(tmp_path: Path) -> None:
+    db_path = _index_fixture(tmp_path)
+    rebuild_search_index(db_path)
+    assert "t1:chunk:0" in fts_candidates(db_path, "decay", kind="forum_chunk")
+
+    store = _replace_t1(
+        db_path, title="Zebracorn momentum", body="Zebracorn momentum signals."
+    )
+    try:
+        t2_before = _fts_rows(store.conn, "t2")
+        with store.conn:
+            inserted = reindex_forum_topics(store.conn, ["t1"])
+        t2_after = _fts_rows(store.conn, "t2")
+        t1_rows = _fts_rows(store.conn, "t1")
+    finally:
+        store.close()
+
+    assert inserted == len(t1_rows) >= 1
+    assert t2_before == t2_after and t2_before
+    assert fts_candidates(db_path, "zebracorn", kind="forum_chunk") == ["t1:chunk:0"]
+    assert fts_candidates(db_path, "decay", kind="forum_chunk") == []
+
+
+def test_reindex_forum_topics_without_fts_returns_zero(tmp_path: Path) -> None:
+    conn = sqlite3.connect(":memory:")
+    try:
+        assert reindex_forum_topics(conn, ["t1"]) == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.skipif(
+    sqlite3.sqlite_version_info < (3, 43, 0),
+    reason="Chinese index requires SQLite 3.43",
+)
+def test_reindex_forum_topics_updates_chinese_index(tmp_path: Path) -> None:
+    db_path = _index_fixture(tmp_path)
+    rebuild_search_index(db_path, chinese=True)
+
+    store = _replace_t1(db_path, title="动量因子", body="动量因子需要中性化处理。")
+    try:
+        with store.conn:
+            reindex_forum_topics(store.conn, ["t1"])
+        conn = store.conn
+        found = chinese_index.candidates(conn, "动量因子", "forum_chunk", 10, False)
+        indexed = conn.execute(
+            "SELECT count(*) FROM chinese_index_rows WHERE kind='forum_chunk'"
+        ).fetchone()[0]
+        fts_rows = conn.execute("SELECT count(*) FROM chinese_fts_v2").fetchone()[0]
+        chunks = conn.execute(
+            "SELECT count(*) FROM chunks WHERE chunk_level=1"
+        ).fetchone()[0]
+    finally:
+        store.close()
+
+    assert found == ["t1:chunk:0"]
+    assert indexed == chunks
+    assert fts_rows == indexed

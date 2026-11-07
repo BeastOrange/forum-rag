@@ -205,6 +205,7 @@ async def evaluate(db, cases, repeats, top_k, transport):
             **os.environ,
             "FORUM_RAG_DB": str(db.resolve()),
             "WQ_FORUM_RAG_AUTO_REFRESH": "0",
+            "WQ_FORUM_RAG_AUTO_SYNC": "0",
         },
     )
     async with stdio_client(parameters) as (reader, writer):

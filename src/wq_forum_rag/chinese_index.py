@@ -100,6 +100,22 @@ def sync_knowledge(conn, slug):
     insert_rows(conn, rows)
 
 
+def delete_forum_topics(conn, topic_ids):
+    for topic_id in topic_ids:
+        rowids = [
+            (row[0],)
+            for row in conn.execute(
+                "SELECT rowid FROM chinese_index_rows WHERE kind='forum_chunk' "
+                "AND record_id >= ? || ':chunk:' AND record_id < ? || ':chunk;'",
+                (topic_id, topic_id),
+            ).fetchall()
+        ]
+        if not rowids:
+            continue
+        conn.executemany("DELETE FROM chinese_fts_v2 WHERE rowid=?", rowids)
+        conn.executemany("DELETE FROM chinese_index_rows WHERE rowid=?", rowids)
+
+
 def forum_constraint_sql(conn, constraints):
     """Match ASCII boundaries in a title and its candidate chunk, before LIMIT."""
     if not constraints:

@@ -21,6 +21,7 @@ from wq_forum_rag.search_cache import CachedEmbeddingBackend
 from wq_forum_rag.search_index import rebuild_search_index
 from wq_forum_rag.search_records import search_doc_records
 from wq_forum_rag.source_cli import register_source_commands
+from wq_forum_rag.sync_cli import register_sync_commands
 
 DEFAULT_DB_PATH = Path(".cache/forum.sqlite3")
 app = typer.Typer(
@@ -389,3 +390,4 @@ def main() -> None:
 
 register_evolution_commands(app)
 register_source_commands(app)
+register_sync_commands(app)

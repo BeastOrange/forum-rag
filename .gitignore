@@ -13,6 +13,7 @@ __pycache__/
 dist/
 build/
 WQPCommunityState_*.json
+WQP_CommunityState_*.json
 *.pdf
 .DS_Store
 20261027_data/
