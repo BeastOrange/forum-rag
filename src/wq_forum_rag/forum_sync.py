@@ -51,6 +51,10 @@ CUTOFF_OVERLAP = timedelta(hours=2)
 LOCK_STALE_AFTER = timedelta(hours=12)
 PAGE_SIZE = 100
 MAX_ERROR_CHARS = 300
+ONE_RUN_NOTICE = (
+    "No saved BRAIN credentials. Enter them for this run only; nothing is stored. "
+    "(Run `forum-rag login` to save them instead.)"
+)
 
 TOPICS_PATH = "/api/v2/community/topics.json"
 POSTS_PATH = "/api/v2/community/posts.json"
@@ -155,6 +159,21 @@ def client_for(credentials: SupportCredentials) -> SupportClient:
 def default_client_factory() -> SupportClient:
     """Client from env, keyring or file credentials; never prompts."""
     return client_for(user_config.require_credentials())
+
+
+def interactive_client_factory() -> SupportClient:
+    """Like ``default_client_factory``, but asks in a terminal for one run.
+
+    Credentials typed here stay in memory for this run and are never stored.
+    Without a terminal it fails at once instead of waiting for input.
+    """
+    try:
+        return default_client_factory()
+    except SupportCredentialsMissing:
+        if not user_config.is_interactive():
+            raise SupportCredentialsMissing(user_config.NO_TERMINAL_MESSAGE) from None
+    credentials = user_config.prompt_credentials(ONE_RUN_NOTICE)
+    return client_for(credentials)
 
 
 # -- normalizers (mirror the reference extension's export mapping) ------------

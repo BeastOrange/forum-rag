@@ -108,7 +108,10 @@ def register_sync_commands(app: typer.Typer) -> None:
                 "--community requires --full", param_hint="--community"
             )
         service = forum_sync.ForumSyncService(
-            db_path, keep_backups=keep_backups, progress=_progress
+            db_path,
+            client_factory=forum_sync.interactive_client_factory,
+            keep_backups=keep_backups,
+            progress=_progress,
         )
         if if_stale:
             state = service.status(sync_interval_days)
@@ -140,7 +143,7 @@ def register_sync_commands(app: typer.Typer) -> None:
     @app.command("sync-check")
     def sync_check_command() -> None:
         """Check the Support API login without writing anything (read-only)."""
-        _finish(forum_sync.support_check())
+        _finish(forum_sync.support_check(forum_sync.interactive_client_factory))
 
     @app.command("login")
     def login_command() -> None:
