@@ -965,6 +965,15 @@ def support_check(client_factory: Callable[[], Any] | None = None) -> dict[str, 
     }
 
 
+def verify_login(credentials: SupportCredentials) -> dict[str, Any]:
+    """Log in once with ``credentials``; nothing is stored or written."""
+    try:
+        login = client_for(credentials).login()
+    except SupportError as exc:
+        return {"status": _error_status(exc), "reason": sanitize_error(exc)}
+    return {"status": "ok", "hops": login.get("hops"), "role": login.get("role")}
+
+
 # -- MCP startup ----------------------------------------------------------------
 
 
