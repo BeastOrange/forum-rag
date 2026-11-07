@@ -21,6 +21,7 @@ def sync_logger(monkeypatch: pytest.MonkeyPatch) -> logging.Logger:
     logger = logging.getLogger("wq_forum_rag.sync")
     monkeypatch.setattr(logger, "handlers", [])
     monkeypatch.setattr(logger, "level", logger.level)
+    monkeypatch.setattr(logger, "propagate", logger.propagate)
     return logger
 
 
@@ -50,6 +51,7 @@ def test_main_starts_background_sync_with_cli_overrides(
     assert captured["keep_backups"] == 2
     assert runs == ["stdio"]
     assert sync_logger.handlers
+    assert sync_logger.propagate is False
     assert capsys.readouterr().out == ""
 
 

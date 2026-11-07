@@ -653,6 +653,9 @@ def _start_background_sync(argv: list[str]) -> dict[str, Any]:
         handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
+        # MCPServer already puts a stderr handler on the root logger; stop
+        # propagation so each sync line is written once.
+        logger.propagate = False
     status = forum_sync.maybe_start_background_sync(
         _resolve_db_path(None),
         interval_days=args.sync_interval_days,
