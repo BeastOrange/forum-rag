@@ -119,7 +119,16 @@ def resolve_interval_days(value: float | None = None) -> float:
 
 def resolve_keep_backups(value: int | None = None) -> int:
     if value is not None:
-        return max(int(value), 0)
+        keep = int(value)
+        if keep < 0:
+            # A negative count must never mean "delete every backup".
+            logger.warning(
+                "Invalid keep_backups=%d; keeping %d backup",
+                keep,
+                DEFAULT_KEEP_BACKUPS,
+            )
+            return DEFAULT_KEEP_BACKUPS
+        return keep
     raw = os.environ.get(KEEP_BACKUPS_ENV, "").strip()
     if not raw:
         return DEFAULT_KEEP_BACKUPS

@@ -779,6 +779,7 @@ def test_settings_helpers(
 
     assert forum_sync.resolve_keep_backups() == 1
     assert forum_sync.resolve_keep_backups(0) == 0
+    assert forum_sync.resolve_keep_backups(-1) == 1
     monkeypatch.setenv(forum_sync.KEEP_BACKUPS_ENV, "4")
     assert forum_sync.resolve_keep_backups() == 4
     monkeypatch.setenv(forum_sync.KEEP_BACKUPS_ENV, "many")
