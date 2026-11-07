@@ -642,10 +642,26 @@ mcp = build_mcp_server()
 
 
 def _start_background_sync(argv: list[str]) -> dict[str, Any]:
-    """Start the silent incremental forum sync; log only to stderr."""
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--sync-interval-days", type=float, default=None)
-    parser.add_argument("--keep-backups", type=int, default=None)
+    """Start the silent incremental forum sync; log only to stderr.
+
+    ``-h/--help`` prints usage and exits before any sync is started.
+    """
+    parser = argparse.ArgumentParser(
+        prog="forum-rag-mcp",
+        description="Serve the local forum index over MCP stdio.",
+    )
+    parser.add_argument(
+        "--sync-interval-days",
+        type=float,
+        default=None,
+        help="startup sync threshold in days (default 3)",
+    )
+    parser.add_argument(
+        "--keep-backups",
+        type=int,
+        default=None,
+        help="number of DB backups to keep (default 1)",
+    )
     args, _ = parser.parse_known_args(argv)
     logger = logging.getLogger("wq_forum_rag.sync")
     if not logger.handlers:

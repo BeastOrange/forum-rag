@@ -402,6 +402,7 @@ class ForumSyncService:
             "started_at": _iso(started),
             **dict.fromkeys(_COUNT_KEYS, 0),
             "backup": None,
+            "backup_reused": False,
             "backups_removed": [],
         }
         if not full and not self.db_path.is_file():
@@ -456,8 +457,9 @@ class ForumSyncService:
 
         try:
             if self.db_path.is_file():
-                backup, removed = self._rotate_backups(started)
+                backup, removed, reused = self._rotate_backups(started)
                 result["backup"] = backup
+                result["backup_reused"] = reused
                 result["backups_removed"] = removed
             with ForumStore(self.db_path) as store:
                 return self._run_store(
@@ -800,15 +802,25 @@ class ForumSyncService:
         ]
         return sorted(files, key=lambda path: (path.stat().st_mtime_ns, path.name))
 
-    def _rotate_backups(self, started: datetime) -> tuple[str | None, list[str]]:
+    def _rotate_backups(self, started: datetime) -> tuple[str | None, list[str], bool]:
         existing = self._backup_files()
         removed: list[str] = []
+        reusable = self._reusable_backup(existing) if self.keep_backups else None
+        if reusable is not None:
+            # An unfinished earlier sync already backed up this state.
+            others = [path for path in existing if path != reusable]
+            while len(others) > self.keep_backups - 1:
+                path = others.pop(0)
+                path.unlink(missing_ok=True)
+                removed.append(str(path))
+            self._emit(f"backup reused: {reusable}")
+            return str(reusable), removed, True
         while len(existing) > max(self.keep_backups - 1, 0):
             path = existing.pop(0)
             path.unlink(missing_ok=True)
             removed.append(str(path))
         if self.keep_backups == 0:
-            return None, removed
+            return None, removed, False
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         stamp = started.astimezone(UTC).strftime("%Y%m%d-%H%M%S")
         final = self.backup_dir / f"{self.db_path.stem}-before-sync-{stamp}.sqlite3"
@@ -824,7 +836,39 @@ class ForumSyncService:
             partial.unlink(missing_ok=True)
             raise
         self._emit(f"backup written: {final}")
-        return str(final), removed
+        return str(final), removed, False
+
+    def _reusable_backup(self, existing: list[Path]) -> Path | None:
+        """Newest sync backup taken after the last successful sync, if any.
+
+        Such a backup comes from a sync attempt that never finished, so the DB
+        still holds the same pre-sync state (plus that attempt's pages). An
+        export imported after the backup makes it stale, so it is not reused.
+        """
+        prefix = f"{self.db_path.stem}-before-sync-"
+        stamped: list[tuple[datetime, Path]] = []
+        for path in existing:
+            if not path.name.startswith(prefix):
+                continue
+            raw = path.name.removeprefix(prefix).removesuffix(".sqlite3")
+            try:
+                taken = datetime.strptime(raw, "%Y%m%d-%H%M%S").replace(tzinfo=UTC)
+            except ValueError:
+                continue
+            stamped.append((taken, path))
+        if not stamped:
+            return None
+        taken, newest = max(stamped)
+        meta = self._read_meta()
+        succeeded = _parse_time(meta.get("sync_last_success_at"))
+        if succeeded is not None and taken <= succeeded:
+            return None
+        exported, _ = _watermark_from_meta(
+            {"source_mtime_ns": meta.get("source_mtime_ns", "")}
+        )
+        if exported is not None and taken < exported:
+            return None
+        return newest
 
     def _remove_partials(self) -> None:
         if not self.backup_dir.is_dir():

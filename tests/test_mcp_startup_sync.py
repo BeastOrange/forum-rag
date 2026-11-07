@@ -146,6 +146,27 @@ def test_main_keeps_serving_when_db_file_is_not_sqlite(
     assert capsys.readouterr().out == ""
 
 
+@pytest.mark.parametrize("flag", ["--help", "-h"])
+def test_help_exits_without_sync_or_serving(
+    monkeypatch: pytest.MonkeyPatch, capsys, sync_logger, flag: str
+):
+    calls: list = []
+    monkeypatch.setattr(
+        forum_sync,
+        "maybe_start_background_sync",
+        lambda *args, **kwargs: calls.append("sync") or {"status": "started"},
+    )
+    monkeypatch.setattr(mcp_server.mcp, "run", lambda transport: calls.append("run"))
+    monkeypatch.setattr(sys, "argv", ["forum-rag-mcp", flag])
+
+    with pytest.raises(SystemExit) as exc:
+        mcp_server.main()
+
+    assert exc.value.code == 0
+    assert calls == []
+    assert "--sync-interval-days" in capsys.readouterr().out
+
+
 def _api_post(pid: int, title: str, body: str) -> dict:
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {

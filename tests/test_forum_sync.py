@@ -608,6 +608,43 @@ def test_backup_retention(
     assert len(status["backups"]) == len(names)
 
 
+def test_unfinished_sync_backup_is_reused(tmp_path: Path) -> None:
+    db = tmp_path / "forum.sqlite3"
+    full_build(db)
+    _dummy_backups(db, 2)
+    backups = db.parent / "backups"
+    blocked = FakeSupportClient(
+        make_routes(recent_pages=[[]]),
+        failures={POSTS_PATH: SupportNetworkError("timed out")},
+    )
+    first = make_service(db, blocked, now=LATER, keep_backups=2).sync()
+    assert first["status"] == "network_error"
+    assert first["backup_reused"] is False
+    kept = Path(first["backup"])
+    assert kept.name == "forum-before-sync-20261111-120000.sqlite3"
+
+    retry = FakeSupportClient(make_routes(recent_pages=[[]], article_pages=[[]]))
+    later = LATER + timedelta(hours=1)
+    second = make_service(db, retry, now=later, keep_backups=2).sync()
+    assert second["status"] == "synced"
+    assert second["backup_reused"] is True
+    assert second["backup"] == str(kept)
+    assert sorted(p.name for p in backups.glob("forum-before-*.sqlite3")) == [
+        "forum-before-manual-1.sqlite3",
+        kept.name,
+    ]
+
+    after_success = FakeSupportClient(
+        make_routes(recent_pages=[[]], article_pages=[[]])
+    )
+    third = make_service(db, after_success, now=later + timedelta(days=4)).sync()
+    assert third["backup_reused"] is False
+    assert third["backup"] != str(kept)
+    assert [p.name for p in backups.glob("forum-before-*.sqlite3")] == [
+        Path(third["backup"]).name
+    ]
+
+
 def test_held_lock_returns_already_running(tmp_path: Path) -> None:
     db = tmp_path / "forum.sqlite3"
     lock = tmp_path / "forum.sqlite3.sync.lock"

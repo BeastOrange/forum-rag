@@ -165,7 +165,7 @@ uv run forum-rag sync-status
 | 查看水位线、上次结果和备份 | `uv run forum-rag sync-status` |
 | 只读检查登录与 API | `uv run forum-rag sync-check` |
 
-**备份。** 每次同步写入已有数据库前，会先在 `<数据库目录>/backups` 下用 SQLite 备份接口生成 `<库名>-before-sync-<UTC时间>.sqlite3`。默认只保留 1 份，可用 `--keep-backups N` 或 `WQ_FORUM_RAG_KEEP_BACKUPS` 修改，`0` 表示不备份并删除已有备份。保留规则匹配所有 `<库名>-before-*.sqlite3`，所以升级后的第一次同步（包括 MCP 启动时的静默同步）会把以前手动留下的 `forum-before-*.sqlite3` 删到只剩保留数量。需要保留旧备份时，请先把它们移出该目录，或调大保留数量。磁盘峰值约为数据库本身加上保留份数的备份。
+**备份。** 每次同步写入已有数据库前，会先在 `<数据库目录>/backups` 下用 SQLite 备份接口生成 `<库名>-before-sync-<UTC时间>.sqlite3`。如果上一次同步没有完整跑完（例如 MCP 会话结束时后台同步被中断，或手动运行带 `--max-pages` / `--community` 的同步），并且最新的这类备份晚于最近一次成功同步，就直接复用这份备份，不再重写一份，结果 JSON 中 `backup_reused` 为 `true`。默认只保留 1 份，可用 `--keep-backups N` 或 `WQ_FORUM_RAG_KEEP_BACKUPS` 修改，`0` 表示不备份并删除已有备份。保留规则匹配所有 `<库名>-before-*.sqlite3`，所以升级后的第一次同步（包括 MCP 启动时的静默同步）会把以前手动留下的 `forum-before-*.sqlite3` 删到只剩保留数量。需要保留旧备份时，请先把它们移出该目录，或调大保留数量。磁盘峰值约为数据库本身加上保留份数的备份。
 
 **存储。** API 返回的数据按页处理后直接写库，不生成中间导出文件；唯一的临时文件是备份过程中的 `.partial`，成功后改名，失败时删除。Help Center 文章作为论坛主题存储，社区名为 `Help Center / <分类>`，可以用 `search` / `show` 检索。
 
