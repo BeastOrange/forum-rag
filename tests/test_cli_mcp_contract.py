@@ -9,7 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from wq_forum_rag.cli import app
-from wq_forum_rag.indexer import ForumIndexService
+from wq_forum_rag.indexer import ForumIndexService, latest_export_for
 from wq_forum_rag.knowledge import KnowledgeStore
 from wq_forum_rag.mcp_server import (
     find_by_exact,
@@ -317,6 +317,27 @@ def test_search_auto_refreshes_when_source_json_changes(
 
     post_payload = get_post("t3", db=str(db_path))
     assert post_payload["post"]["title"] == "Turnover ideas"
+
+
+@pytest.mark.parametrize(
+    "export_name",
+    [
+        "WQP_CommunityState_20261027_184817.json",
+        "WQPCommunityState_20260618_142702.json",
+    ],
+)
+def test_latest_export_for_discovers_both_export_names(
+    tmp_path: Path, monkeypatch, export_name: str
+) -> None:
+    source_dir = tmp_path / "exports"
+    source_dir.mkdir()
+    json_path = source_dir / export_name
+    _write_fixture(json_path)
+    (source_dir / "unrelated.json").write_text("{}", encoding="utf-8")
+    monkeypatch.delenv("WQ_FORUM_RAG_SOURCE", raising=False)
+    monkeypatch.setenv("WQ_FORUM_RAG_SOURCE_DIR", str(source_dir))
+
+    assert latest_export_for(tmp_path / "forum.sqlite3") == json_path
 
 
 def test_auto_refresh_returns_locked_status_when_write_lock_is_busy(

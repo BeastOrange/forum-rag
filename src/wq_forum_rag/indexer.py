@@ -10,7 +10,8 @@ from wq_forum_rag.manifest import SourceManifestService
 from wq_forum_rag.search_cache import CachedEmbeddingBackend
 from wq_forum_rag.search_index import fts_candidates, rebuild_search_index
 
-EXPORT_PATTERN = "WQPCommunityState_*.json"
+EXPORT_PATTERNS = ("WQP_CommunityState_*.json", "WQPCommunityState_*.json")
+EXPORT_PATTERN = EXPORT_PATTERNS[0]
 AUTO_REFRESH_ENV = "WQ_FORUM_RAG_AUTO_REFRESH"
 SOURCE_ENV = "WQ_FORUM_RAG_SOURCE"
 SOURCE_DIR_ENV = "WQ_FORUM_RAG_SOURCE_DIR"
@@ -451,12 +452,21 @@ def _configured_source(source: str | Path | None) -> Path | None:
     return Path(env_source).expanduser() if env_source else None
 
 
+def _glob_exports(directory: Path) -> list[Path]:
+    found: dict[Path, None] = {}
+    for pattern in EXPORT_PATTERNS:
+        for path in directory.glob(pattern):
+            if path.is_file():
+                found.setdefault(path, None)
+    return list(found)
+
+
 def _latest_from_source(source: Path) -> Path | None:
     if source.is_file():
         return source
     if not source.is_dir():
         return None
-    exports = [path for path in source.glob(EXPORT_PATTERN) if path.is_file()]
+    exports = _glob_exports(source)
     if not exports:
         return None
     return max(exports, key=lambda path: (path.stat().st_mtime_ns, path.name))
@@ -464,9 +474,7 @@ def _latest_from_source(source: Path) -> Path | None:
 
 def _latest_related_export(source_path: Path) -> Path | None:
     if source_path.is_file():
-        exports = [
-            path for path in source_path.parent.glob(EXPORT_PATTERN) if path.is_file()
-        ]
+        exports = _glob_exports(source_path.parent)
         if exports:
             return max(exports, key=lambda path: (path.stat().st_mtime_ns, path.name))
         return source_path

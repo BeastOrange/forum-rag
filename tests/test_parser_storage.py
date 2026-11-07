@@ -98,6 +98,59 @@ def test_iter_topics_parses_nested_json_and_cleans_html(sample_json_path: Path) 
     assert "ignored" not in topic.body_text
 
 
+def test_iter_topics_without_by_category_yields_only_posts(
+    sample_json_path: Path,
+) -> None:
+    topics = list(iter_topics(sample_json_path))
+
+    assert [topic.id for topic in topics] == ["topic-1"]
+    assert topics[0].comment_count == 2
+    assert topics[0].vote_num == 3
+
+
+def test_iter_topics_yields_help_center_articles(
+    sample_json_path: Path, tmp_path: Path
+) -> None:
+    payload = json.loads(sample_json_path.read_text(encoding="utf-8"))
+    payload["byCategory"] = {
+        "cat-1": {
+            "title": "Getting Started",
+            "sections": {
+                "sec-1": {
+                    "articles": {
+                        "art-1": {
+                            "id": "art-1",
+                            "title": "What is an alpha?",
+                            "articleContent": "<p>An <b>alpha</b> is a model.</p>",
+                            "url": "https://support.example/articles/art-1",
+                            "createdAt": "2023-05-01T00:00:00Z",
+                            "author": "BRAIN team",
+                            "voteNum": 4,
+                            "commentNum": 0,
+                        }
+                    }
+                }
+            },
+        }
+    }
+    json_path = tmp_path / "with_articles.json"
+    json_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    topics = {topic.id: topic for topic in iter_topics(json_path)}
+
+    assert set(topics) == {"topic-1", "art-1"}
+    article = topics["art-1"]
+    assert article.community_id == "cat-1"
+    assert article.community_title == "Help Center / Getting Started"
+    assert article.title == "What is an alpha?"
+    assert article.body_text == "An alpha is a model."
+    assert article.url == "https://support.example/articles/art-1"
+    assert article.created_at == "2023-05-01T00:00:00Z"
+    assert article.author == "BRAIN team"
+    assert article.vote_num == 4
+    assert article.comments == ()
+
+
 def test_build_chunks_creates_parent_child_windows(sample_json_path: Path) -> None:
     topic = next(iter(iter_topics(sample_json_path)))
 
