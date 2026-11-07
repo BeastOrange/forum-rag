@@ -1060,6 +1060,49 @@ def maybe_start_background_sync(
     return payload
 
 
+# -- doctor -----------------------------------------------------------------------
+
+
+def sync_overview(db_path: str | Path) -> dict[str, Any]:
+    """Auto-sync setting and watermark for ``forum-rag doctor``; never raises."""
+    enabled, source = user_config.auto_sync_setting()
+    interval = resolve_interval_days()
+    overview: dict[str, Any] = {
+        "auto_sync_enabled": enabled,
+        "auto_sync_source": source,
+        "interval_days": interval,
+        "watermark": None,
+        "watermark_source": None,
+        "due_at": None,
+        "stale": True,
+        "needs_full": True,
+        "last_status": None,
+        "last_attempt_at": None,
+        "last_error": None,
+    }
+    try:
+        meta = _read_meta_ro(db_path)
+    except (sqlite3.Error, OSError) as exc:
+        overview["error"] = sanitize_error(exc)
+        return overview
+    watermark, watermark_source = _watermark_from_meta(meta)
+    if watermark is not None:
+        due_at = watermark + timedelta(days=interval)
+        overview.update(
+            watermark=_iso(watermark),
+            watermark_source=watermark_source,
+            due_at=_iso(due_at),
+            stale=datetime.now(UTC) >= due_at,
+            needs_full=False,
+        )
+    overview.update(
+        last_status=meta.get("sync_last_status") or None,
+        last_attempt_at=meta.get("sync_last_attempt_at") or None,
+        last_error=meta.get("sync_last_error") or None,
+    )
+    return overview
+
+
 # -- startup state and the search stale notice ----------------------------------
 
 _STARTUP_LOCK = threading.Lock()

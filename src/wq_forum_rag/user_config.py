@@ -332,3 +332,18 @@ def prompt_credentials(notice: str | None = None) -> SupportCredentials:
     if not password:
         raise SupportCredentialsMissing("No BRAIN password entered")
     return SupportCredentials(username=username, password=password)
+
+
+# -- doctor ---------------------------------------------------------------------
+
+
+def credentials_report() -> dict[str, Any]:
+    """Where credentials would come from; never includes their values."""
+    found = resolve_credentials()
+    return {
+        "available": found is not None,
+        "source": found[1] if found else None,
+        "keyring_available": keyring_available(),
+        "keyring_backend": keyring_backend_name(),
+        "credentials_file": str(credentials_path()),
+    }
