@@ -65,37 +65,49 @@ uv run forum-rag refresh \
 
 If the user provides an existing SQLite database, do not reindex unless asked. Point the MCP server to it with `FORUM_RAG_DB`.
 
-### First-time forum build
+### Forum data: let the user choose
 
-If the user has neither an export nor an existing database, build the forum index from the Support API. You, the installing agent, must do this once; MCP startup never runs a full build.
+If the user has neither an export nor an existing database, the forum index can be built from the Support API with the user's BRAIN account. How much of the account the tool may see is the user's decision. Explain these three supported modes and let the user pick one; do not pick for them:
 
-1. Check that both credential variables are set, without printing their values:
+- **(a) Import a browser-extension export.** The user exports the forum JSON with the extension, and you run `uv run forum-rag refresh <export>` as shown above. Our code never sees the password.
+- **(b) Manual sync, credentials entered per run.** The user runs `uv run forum-rag sync` (first time: `uv run forum-rag sync --full`) in their own terminal and types the username and password when prompted. They are used in memory for that run only; nothing is stored. Without a terminal (MCP server, an AI-driven shell) the command never waits for input: it fails at once with `no_credentials`.
+- **(c) Saved credentials plus optional auto sync.** The user runs `uv run forum-rag login` once in their own terminal. It verifies the login against the live API, saves the credentials in the OS credential store (macOS Keychain, Windows Credential Manager, Linux Secret Service; on headless Linux, WSL or Docker it warns and falls back to a plaintext `~/.config/wq-forum-rag/credentials` file with 0600 permissions), and then asks whether to enable auto sync (default no). `uv run forum-rag logout` deletes the saved credentials and turns auto sync off.
+
+Rules for you, the agent:
+
+- Never enable auto sync yourself. Do not answer the `login` prompt, do not set `WQ_FORUM_RAG_AUTO_SYNC`, and do not create or edit `settings.json`. Auto sync is off by default and only the user turns it on.
+- Never ask for the password in chat, and never run a command that prints, logs or stores it. Do not put credentials in an MCP client config `env` block or a shell profile, and do not suggest it: other programs and AI agents can read env vars and those files.
+- `login` refuses to run without a terminal, so you cannot run it for the user. Ask the user to run it, or `sync --full`, in their own terminal.
+
+First-time full build (MCP startup never runs one):
+
+1. Check readiness without revealing secrets:
 
    ```bash
-   test -n "$WQ_BRAIN_USERNAME" && test -n "$WQ_BRAIN_PASSWORD" && echo set
+   uv run forum-rag doctor --db .cache/forum.sqlite3
    ```
 
-   If this does not print `set`, ask the user to export `WQ_BRAIN_USERNAME` and `WQ_BRAIN_PASSWORD` in their shell profile (and in the MCP client's `env` block, because GUI clients may not read the shell profile). Never ask for the password in chat, never echo it, and never write it to any file.
+   `credentials.source` is `env`, `keyring`, `file` or `null`; `sync.needs_full`, `sync.watermark` and `sync.auto_sync_enabled` show the sync state. If `credentials.source` is `null`, ask the user to run `uv run forum-rag login` (mode c) or `uv run forum-rag sync --full --db .cache/forum.sqlite3` (mode b) in their own terminal, then stop and wait. Any command result with `"status": "no_credentials"` whose reason names `forum-rag login` means the same: stop and ask the user. Do not retry.
 
-2. Check login and API access (read-only; prints no secrets):
+2. Once credentials are saved, check login and API access (read-only; prints no secrets):
 
    ```bash
    uv run forum-rag sync-check
    ```
 
-   Continue only when it reports `"status": "ok"`. `auth_failed`, `blocked` or `network_error` must be reported to the user, not retried in a loop.
+   Continue only when it reports `"status": "ok"`. `auth_failed`, `blocked` or `network_error` must be reported to the user, not retried in a loop. `auth_failed` usually means the password changed; ask the user to run `uv run forum-rag login` again.
 
-3. Run the full build once:
+3. With the user's permission, run the full build once:
 
    ```bash
    uv run forum-rag sync --full --db .cache/forum.sqlite3
    ```
 
-   It fetches every community post with its comments and all Help Center articles at about 3 requests per second, so it takes a long time. Run it in the background or with a generous timeout. If it is interrupted, run the same command again; posts whose comment count is unchanged are not refetched. Progress goes to stderr and the result JSON to stdout.
+   It fetches every community post with its comments and all Help Center articles at about 3 requests per second, so it takes a long time. Run it in the background or with a generous timeout. If it is interrupted, run the same command again; posts whose comment count is unchanged are not refetched. Progress goes to stderr and the result JSON to stdout. If the user chose mode (b), they run this command in their own terminal instead of you.
 
 4. Confirm with `uv run forum-rag sync-status --db .cache/forum.sqlite3`: `watermark_source` should be `sync` and `needs_full` should be `false`. Only a complete full run writes the watermark.
 
-After that, `forum-rag-mcp` keeps the index current by itself: on startup it runs a silent incremental sync in a background thread when the last successful sync is older than 3 days (`WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` or `forum-rag-mcp --sync-interval-days N`; `WQ_FORUM_RAG_AUTO_SYNC=0` disables it). Search keeps working during the sync. Help Center articles are stored as forum topics with community `Help Center / <category>`.
+Auto sync (only after the user enabled it): on startup `forum-rag-mcp` runs a silent incremental sync in a background thread when credentials are available and the last successful sync is older than 3 days (`WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` or `forum-rag-mcp --sync-interval-days N`). It never prompts. Search keeps working during the sync. The switch is `auto_sync` in `~/.config/wq-forum-rag/settings.json` (directory overridable with `WQ_FORUM_RAG_CONFIG_DIR`), written only by `login` (the user's answer) and `logout` (`false`). A non-empty `WQ_FORUM_RAG_AUTO_SYNC` overrides it both ways: `0/false/no/off` disables, any other value enables. With neither set, auto sync is off. Credential lookup order is env vars, then the OS credential store, then the plaintext file. Help Center articles are stored as forum topics with community `Help Center / <category>`.
 
 Known limitation: incremental sync selects posts by `updated_at` and only fetches comments for those posts, so a new comment on a post whose `updated_at` did not change can be missed until the next `sync --full`. Incremental sync also never removes posts deleted online; only a complete `sync --full` without `--max-pages` or `--community` prunes them (topics referenced by knowledge pages are kept).
 
@@ -115,7 +127,7 @@ This upgrade uses the official MCP Python SDK 2.x; the separate `fastmcp` packag
 
 Do not delete or rebuild an existing forum index for a code upgrade. Only run `ingest-docs <dir>` when the user wants to add or update their own Markdown documentation. Its default pruning removes documents absent from that directory; use `--no-prune` if other imported documents must be retained. Do not re-run forum `refresh` unless source data actually needs updating.
 
-Version 0.3.0 adds forum sync from the Support API (`forum-rag sync`, `sync --full`, `sync --if-stale`, `sync-status`, `sync-check`) and a silent incremental sync at MCP startup (see "First-time forum build"). It adds no MCP tools: there are still 22. Auto sync needs `WQ_BRAIN_USERNAME` / `WQ_BRAIN_PASSWORD` in the MCP server's environment; without them startup skips the sync and everything else works as before. An existing database with an imported export already has a watermark, so posts need no full build after upgrading. Help Center articles are different: imports before 0.3.0 ignored the export's `byCategory` articles, and incremental sync only fetches articles updated after the watermark, so most articles stay missing. Run `uv run forum-rag sync --full --db .cache/forum.sqlite3` once (or re-import a current export with `refresh`) to load the rest.
+Version 0.3.0 adds forum sync from the Support API (`forum-rag login`, `logout`, `sync`, `sync --full`, `sync --if-stale`, `sync-status`, `sync-check`) and an opt-in silent incremental sync at MCP startup (see "Forum data: let the user choose"). It adds no MCP tools: there are still 22. Auto sync is off by default; only the user can enable it, by answering yes in `forum-rag login` or by setting `WQ_FORUM_RAG_AUTO_SYNC=1`. Without it, startup skips the sync and everything else works as before. An existing database with an imported export already has a watermark, so posts need no full build after upgrading. Help Center articles are different: imports before 0.3.0 ignored the export's `byCategory` articles, and incremental sync only fetches articles updated after the watermark, so most articles stay missing. Run `uv run forum-rag sync --full --db .cache/forum.sqlite3` once (or re-import a current export with `refresh`) to load the rest.
 
 Exports and sync coexist: the automatic export refresh before searches skips any export file whose mtime is older than the last sync run that wrote data, so a stale export cannot prune or revert synced topics. Newer exports are still imported automatically, and an explicit `forum-rag refresh <export>` always runs.
 
@@ -141,16 +153,14 @@ Compatible MCP clients can start the server with:
         "forum-rag-mcp"
       ],
       "env": {
-        "FORUM_RAG_DB": "/absolute/path/.cache/forum.sqlite3",
-        "WQ_BRAIN_USERNAME": "<set by the user>",
-        "WQ_BRAIN_PASSWORD": "<set by the user>"
+        "FORUM_RAG_DB": "/absolute/path/.cache/forum.sqlite3"
       }
     }
   }
 }
 ```
 
-The two `WQ_BRAIN_*` entries enable the silent startup sync; the user fills them in, never you. Optional settings in the same block: `WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` (default `3`), `WQ_FORUM_RAG_KEEP_BACKUPS` (default `1`) and `WQ_FORUM_RAG_AUTO_SYNC` (`0` disables the startup sync).
+Do not put credentials in the `env` block: MCP config files are usually plaintext and other programs and agents can read them. The user saves credentials with `uv run forum-rag login` in their own terminal instead. Optional settings in the same block: `WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` (default `3`) and `WQ_FORUM_RAG_KEEP_BACKUPS` (default `1`). `WQ_FORUM_RAG_AUTO_SYNC` is the user's choice; never add it yourself.
 
 For a Conda installation, do not assume the MCP client will run `conda activate`. Prefer the environment's absolute executable path:
 
@@ -265,6 +275,7 @@ Follow this workflow for most questions:
 6. If compiled knowledge is missing but the evidence contains reusable guidance, create a knowledge page.
 7. Run `lint_knowledge(slug=...)` after creating or updating a knowledge page.
 8. If several pages are connected, use `link_knowledge_pages` and optionally `graph_query`.
+9. If a forum search result (`search_forum`, `search_forum_batch` or `find_by_exact`) has a `sync_notice` field, tell the user the forum data may be out of date, with its age and reason (`auto_sync_off`, `no_credentials`, `login_failed`, `sync_running`, `sync_failed` or `sync_due`) and the suggested commands from its `message`. Do not run `login` or enable auto sync yourself. Fresh data has no `sync_notice`.
 
 Do not invent forum facts. If the tools do not return enough evidence, say that the local knowledge base does not contain enough support.
 
@@ -375,8 +386,8 @@ Follow these boundaries:
 - Do not use high confidence for inferred, weak, or single-fragment claims.
 - Do not auto-resolve contradictions; represent them with `conflicts_with`. Do not treat hash embeddings as model-level semantic retrieval. Empty search results are valid; errors are not evidence of absence.
 - Do not call commit-style ingestion unless mutation is intended.
-- The only background ingestion is a silent incremental forum sync at MCP startup when the last sync is older than the threshold. It never runs a full build. The system makes no external LLM calls.
-- Never print, log or store WQ_BRAIN_PASSWORD, cookies or tokens.
+- The only background ingestion is a silent incremental forum sync at MCP startup, and it runs only when the user enabled auto sync, credentials are available and the last sync is older than the threshold. It never runs a full build and never prompts. The system makes no external LLM calls.
+- Never print, log, store or ask for the BRAIN password (including `WQ_BRAIN_PASSWORD`), cookies or tokens. Never enable auto sync on the user's behalf.
 - Do not treat draft knowledge as authoritative.
 
 ## When To Rebuild Or Export
