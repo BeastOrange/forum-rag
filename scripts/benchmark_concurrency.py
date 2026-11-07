@@ -114,7 +114,12 @@ async def run(args, db, queries):
     params = StdioServerParameters(
         command=sys.executable,
         args=["-c", "from wq_forum_rag.mcp_server import main; main()"],
-        env={**os.environ, "FORUM_RAG_DB": str(db), "WQ_FORUM_RAG_AUTO_REFRESH": "0"},
+        env={
+            **os.environ,
+            "FORUM_RAG_DB": str(db),
+            "WQ_FORUM_RAG_AUTO_REFRESH": "0",
+            "WQ_FORUM_RAG_AUTO_SYNC": "0",
+        },
     )
     async with stdio_client(params) as (reader, writer):
         async with ClientSession(reader, writer) as session:
@@ -210,6 +215,7 @@ def main():
     if not queries or any(not isinstance(q, str) or not q.strip() for q in queries):
         parser.error("queries must contain nonempty forum queries")
     os.environ["WQ_FORUM_RAG_AUTO_REFRESH"] = "0"
+    os.environ["WQ_FORUM_RAG_AUTO_SYNC"] = "0"
     result = asyncio.run(run(args, args.db.resolve(), queries))
     result.update(
         mode=args.mode,

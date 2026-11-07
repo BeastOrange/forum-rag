@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import argparse
 import functools
 import inspect
+import logging
 import os
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+from . import forum_sync
 from ._version import __version__
 from .cli import DEFAULT_DB_PATH, ForumIndexService
 from .documents import DocumentStore, ingest_documents
@@ -637,5 +641,27 @@ def build_mcp_server(default_db: str | Path | None = None) -> MCPServer:
 mcp = build_mcp_server()
 
 
+def _start_background_sync(argv: list[str]) -> dict[str, Any]:
+    """Start the silent incremental forum sync; log only to stderr."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--sync-interval-days", type=float, default=None)
+    parser.add_argument("--keep-backups", type=int, default=None)
+    args, _ = parser.parse_known_args(argv)
+    logger = logging.getLogger("wq_forum_rag.sync")
+    if not logger.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    status = forum_sync.maybe_start_background_sync(
+        _resolve_db_path(None),
+        interval_days=args.sync_interval_days,
+        keep_backups=args.keep_backups,
+    )
+    logger.info("forum sync at startup: %s", status)
+    return status
+
+
 def main() -> None:
+    _start_background_sync(sys.argv[1:])
     mcp.run(transport="stdio")
