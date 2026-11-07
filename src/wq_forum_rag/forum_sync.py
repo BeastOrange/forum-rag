@@ -932,8 +932,8 @@ def maybe_start_background_sync(
     try:
         service = factory(db, keep_backups=keep_backups)
         watermark = service.watermark()
-    except sqlite3.OperationalError as exc:
-        if is_database_locked(exc):
+    except sqlite3.Error as exc:
+        if isinstance(exc, sqlite3.OperationalError) and is_database_locked(exc):
             return {**base, **database_locked_status(db, reason=str(exc))}
         logger.warning("forum sync check failed: %s", sanitize_error(exc))
         return {**base, "status": "error", "reason": sanitize_error(exc)}

@@ -656,11 +656,16 @@ def _start_background_sync(argv: list[str]) -> dict[str, Any]:
         # MCPServer already puts a stderr handler on the root logger; stop
         # propagation so each sync line is written once.
         logger.propagate = False
-    status = forum_sync.maybe_start_background_sync(
-        _resolve_db_path(None),
-        interval_days=args.sync_interval_days,
-        keep_backups=args.keep_backups,
-    )
+    try:
+        status = forum_sync.maybe_start_background_sync(
+            _resolve_db_path(None),
+            interval_days=args.sync_interval_days,
+            keep_backups=args.keep_backups,
+        )
+    except Exception as exc:  # noqa: BLE001 - startup sync must never block serving
+        status = {"status": "error", "reason": forum_sync.sanitize_error(exc)}
+        logger.warning("forum sync at startup failed: %s", status["reason"])
+        return status
     logger.info("forum sync at startup: %s", status)
     return status
 

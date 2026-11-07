@@ -169,6 +169,8 @@ uv run forum-rag sync-status
 
 **存储。** API 返回的数据按页处理后直接写库，不生成中间导出文件；唯一的临时文件是备份过程中的 `.partial`，成功后改名，失败时删除。Help Center 文章作为论坛主题存储，社区名为 `Help Center / <分类>`，可以用 `search` / `show` 检索。
 
+**与导出文件并存。** 检索前的导出自动刷新会跳过修改时间早于最近一次同步的导出文件，避免旧导出删掉或覆盖已同步的帖子。比最近一次同步更新的导出仍会自动导入；手动 `refresh <导出>` 不受影响。
+
 **已知限制。**
 
 - 增量同步按帖子的 `updated_at` 倒序挑选帖子，只为这些帖子拉取评论。如果某个帖子有了新评论但 `updated_at` 没变，这条评论可能要等到下一次 `sync --full` 才会入库。规划阶段的抽样检查中，帖子的 `updated_at` 都不早于其最新评论，但 `updated_at` 也会因为评论以外的原因变化，所以这不能证明新评论一定会更新它。
@@ -182,7 +184,7 @@ uv run forum-rag sync-status
 | 你自己的 Markdown 文档目录（示例为 `Documents/`） | ❌ | 由你自行准备并保管，执行 `ingest-docs <目录>` 摄入。平台官方文档不随仓库分发。 |
 | 论坛 SQLite（例如 `.cache/forum.sqlite3`） | ❌ | 由每位用户用自己的平台帐号在本地建立：运行 `sync --full` 从 Support API 拉取，或导出 JSON 后运行 `refresh` / `index`。 |
 
-最小交付物是：**本仓库源码 + 你自己的 Markdown 文档目录 + 你自己的论坛 JSON**。仓库不附带平台官方文档，`Documents/` 已被 Git 忽略，首次使用需执行 `ingest-docs <你的目录>`。
+最小交付物是：**本仓库源码 + 你自己的 Markdown 文档目录 + 你自己的论坛 JSON 或 BRAIN 帐号（`sync --full`）**。仓库不附带平台官方文档，`Documents/` 已被 Git 忽略，首次使用需执行 `ingest-docs <你的目录>`。
 
 如果你选择私下共享已经构建好的 SQLite，对方可以跳过论坛离线索引，只需将 `FORUM_RAG_DB` 指向该文件。请先自行评估相关平台条款及数据分享风险；该数据库默认不应提交到 Git。
 
@@ -406,6 +408,8 @@ uv run forum-rag doctor --db .cache/forum.sqlite3
 Conda 环境中执行 `python -m pip install -e .`，再运行 `forum-rag doctor --db .cache/forum.sqlite3`。只有需要新增或更新仓库文档时，才另外执行 `ingest-docs <目录>`；已有论坛数据不需要重新 `refresh`，也不要删除数据库。如果索引还含其他目录导入的文档，摄入时可加 `--no-prune`，保留目录外文档。
 
 升级到 0.3.0 后新增论坛自动同步（见“自动同步论坛”一节），没有新增 MCP 工具，重启后仍是 22 个。若要启用，请在 shell profile 或 MCP 客户端 `env` 块中设置 `WQ_BRAIN_USERNAME` / `WQ_BRAIN_PASSWORD`；未设置时 MCP 启动会跳过同步，其他功能不受影响。注意：升级后的第一次同步会按保留数量（默认 1）清理 `<数据库目录>/backups` 下旧的 `forum-before-*.sqlite3`，需要的旧备份请提前移走。
+
+0.3.0 之前的导入会忽略导出中的 Help Center 文章，所以由旧导出建立的数据库里没有这些文章。增量同步只会补上水位线之后更新过的文章，其余大部分文章要运行一次 `uv run forum-rag sync --full`（或用当前版本重新 `refresh` 一份新导出）才会入库。
 
 然后重启或重新连接 MCP 客户端。服务进程不会热重载代码；重启后应发现 22 个工具。已摄入官方文档时，可调用 `search_docs("neutralization")`、`get_doc("operators")`；有论坛数据时再验证 `search_forum_batch`。工具不可见时，检查客户端是否仍指向旧环境或错误的仓库目录。
 

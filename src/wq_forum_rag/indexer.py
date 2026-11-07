@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +101,14 @@ class ForumIndexService:
             return {"status": "no_source", "db": str(self.db_path)}
         if not self._needs_refresh(latest):
             return {"status": "unchanged", "db": str(self.db_path), "json": str(latest)}
+        if self._superseded_by_sync(latest):
+            # An API sync wrote newer data than this export; importing it with
+            # prune would delete or revert the synced topics.
+            return {
+                "status": "superseded_by_sync",
+                "db": str(self.db_path),
+                "json": str(latest),
+            }
         try:
             index_result = self.index_from_json(latest, rebuild=False, prune=True)
             manifest_result = SourceManifestService(self.db_path).source_ingest_plan(
@@ -210,6 +219,29 @@ class ForumIndexService:
         except Exception:
             return True
         return any(known.get(key) != value for key, value in fingerprint.items())
+
+    def _superseded_by_sync(self, source: Path) -> bool:
+        """True when a forum sync that wrote data started after the export."""
+        if not self.db_path.exists():
+            return False
+        try:
+            with self.storage.ForumStore(self.db_path, initialize=False) as store:
+                known = dict(
+                    store.conn.execute(
+                        "SELECT key, value FROM schema_meta WHERE key IN "
+                        "('sync_last_success_at', 'sync_last_attempt_at', "
+                        "'sync_last_status')"
+                    ).fetchall()
+                )
+            exported_at = source.stat().st_mtime
+        except (sqlite3.Error, OSError):
+            return False
+        stamps = [known.get("sync_last_success_at")]
+        if known.get("sync_last_status") == "partial":
+            stamps.append(known.get("sync_last_attempt_at"))
+        synced = [_parse_utc(value) for value in stamps]
+        latest = max((value for value in synced if value is not None), default=None)
+        return latest is not None and latest.timestamp() >= exported_at
 
     def _search_rows(self, candidates: list[str]) -> list[dict[str, Any]]:
         base_sql = """
@@ -513,6 +545,16 @@ def _dedupe_paths(paths: list[Path]) -> list[Path]:
             seen.add(key)
             unique.append(path)
     return unique
+
+
+def _parse_utc(value: object) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _auto_refresh_enabled() -> bool:

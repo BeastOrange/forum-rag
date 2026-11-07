@@ -383,6 +383,49 @@ def test_watermark_derived_from_export_refresh(tmp_path: Path) -> None:
     assert status["due_at"] == "2026-10-30T10:48:19Z"
 
 
+def test_auto_refresh_skips_exports_older_than_the_last_sync(
+    tmp_path: Path, monkeypatch
+) -> None:
+    db = tmp_path / "forum.sqlite3"
+    assert full_build(db)["status"] == "synced"
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    json_path = exports / "WQP_CommunityState_20261101_000000.json"
+    json_path.write_text(
+        json.dumps(
+            {
+                "byCommunity": {
+                    "100": {
+                        "title": "Community 100",
+                        "topics": {
+                            "101": {
+                                "id": "101",
+                                "title": "Alpha decay",
+                                "postContent": "<p>stale export text</p>",
+                            }
+                        },
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    older = (NOW - timedelta(days=1)).timestamp()
+    os.utime(json_path, (older, older))
+    monkeypatch.delenv("WQ_FORUM_RAG_SOURCE", raising=False)
+    monkeypatch.setenv("WQ_FORUM_RAG_SOURCE_DIR", str(exports))
+    service = ForumIndexService(db)
+
+    assert service.auto_refresh_if_needed()["status"] == "superseded_by_sync"
+    assert [hit["topic_id"] for hit in service.search("neutralization")] == ["101"]
+    assert service.search("stale export") == []
+    assert topic_ids(db) == {"101", "102", "201"}
+
+    newer = (NOW + timedelta(days=1)).timestamp()
+    os.utime(json_path, (newer, newer))
+    assert service.auto_refresh_if_needed()["status"] == "refreshed"
+
+
 def test_needs_full_without_watermark_makes_no_client_calls(tmp_path: Path) -> None:
     db = tmp_path / "forum.sqlite3"
     calls: list[str] = []

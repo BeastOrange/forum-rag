@@ -124,3 +124,106 @@ def test_search_works_while_background_sync_runs(
         release.set()
         thread.join(5)
     assert not thread.is_alive()
+
+
+def test_main_keeps_serving_when_db_file_is_not_sqlite(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, sync_logger
+):
+    db = tmp_path / "forum.sqlite3"
+    db.write_bytes(b"this is not a sqlite database" * 64)
+    monkeypatch.setenv("FORUM_RAG_DB", str(db))
+    monkeypatch.setenv("WQ_FORUM_RAG_AUTO_SYNC", "1")
+    monkeypatch.setenv("WQ_BRAIN_USERNAME", "fake-user")
+    monkeypatch.setenv("WQ_BRAIN_PASSWORD", "fake-pass")
+    runs: list[str] = []
+    monkeypatch.setattr(mcp_server.mcp, "run", lambda transport: runs.append(transport))
+    monkeypatch.setattr(sys, "argv", ["forum-rag-mcp"])
+
+    assert mcp_server._start_background_sync([])["status"] == "error"
+    mcp_server.main()
+
+    assert runs == ["stdio"]
+    assert capsys.readouterr().out == ""
+
+
+def _api_post(pid: int, title: str, body: str) -> dict:
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {
+        "id": pid,
+        "topic_id": 100,
+        "title": title,
+        "details": f"<p>{body}</p>",
+        "html_url": f"https://support.example/posts/{pid}",
+        "created_at": stamp,
+        "updated_at": stamp,
+        "author_id": 7,
+        "vote_sum": 1,
+        "comment_count": 0,
+    }
+
+
+class PausingClient:
+    """Fake Support client that pauses after the first recent-posts page."""
+
+    def __init__(self, paused: threading.Event, release: threading.Event) -> None:
+        self.paused = paused
+        self.release = release
+        self.last_iteration_truncated = False
+
+    def login(self) -> dict:
+        return {"login_status": 201, "hops": 3, "role": "end-user"}
+
+    def iter_pages(self, path, params=None, *, max_pages=None):
+        self.last_iteration_truncated = False
+        if path == forum_sync.TOPICS_PATH:
+            yield {"topics": [{"id": 100, "name": "Forum"}]}
+        elif path == forum_sync.POSTS_PATH:
+            yield {"posts": [_api_post(301, "Orthogonal", "orthogonality first page")]}
+            self.paused.set()
+            assert self.release.wait(10)
+            yield {"posts": [_api_post(302, "Crowding", "crowding second page")]}
+        else:
+            yield {}
+
+    def map_concurrent(self, fn, items):
+        return [(item, fn(item)) for item in items]
+
+
+def test_search_reads_real_sync_page_commits_while_sync_is_paused(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, sync_logger
+):
+    db = _fixture_db(tmp_path)
+    monkeypatch.setenv("WQ_FORUM_RAG_AUTO_SYNC", "1")
+    monkeypatch.setenv("WQ_FORUM_RAG_AUTO_REFRESH", "0")
+    monkeypatch.setenv("WQ_BRAIN_USERNAME", "fake-user")
+    monkeypatch.setenv("WQ_BRAIN_PASSWORD", "fake-pass")
+    paused = threading.Event()
+    release = threading.Event()
+    client = PausingClient(paused, release)
+
+    def factory(db_path, *, keep_backups=None):
+        return forum_sync.ForumSyncService(
+            db_path, client_factory=lambda: client, keep_backups=keep_backups
+        )
+
+    status = forum_sync.maybe_start_background_sync(db, service_factory=factory)
+    assert status["status"] == "started"
+    thread = next(t for t in threading.enumerate() if t.name == "forum-rag-sync")
+    try:
+        assert paused.wait(10)
+        payload = mcp_server.search_forum("orthogonality", db=str(db), top_k=3)
+        assert payload.get("status") != "locked"
+        assert [hit["topic_id"] for hit in payload["results"]] == ["301"]
+        old = mcp_server.search_forum("neutralization", db=str(db), top_k=3)
+        assert old["results"][0]["topic_id"] == "1"
+        assert thread.is_alive()
+    finally:
+        release.set()
+        thread.join(10)
+    assert not thread.is_alive()
+    payload = mcp_server.search_forum("crowding", db=str(db), top_k=3)
+    assert [hit["topic_id"] for hit in payload["results"]] == ["302"]
+    with sqlite3.connect(db) as conn:
+        meta = dict(conn.execute("SELECT key, value FROM schema_meta").fetchall())
+    conn.close()
+    assert meta["sync_last_status"] == "synced"
