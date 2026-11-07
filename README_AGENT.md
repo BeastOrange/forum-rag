@@ -65,6 +65,40 @@ uv run forum-rag refresh \
 
 If the user provides an existing SQLite database, do not reindex unless asked. Point the MCP server to it with `FORUM_RAG_DB`.
 
+### First-time forum build
+
+If the user has neither an export nor an existing database, build the forum index from the Support API. You, the installing agent, must do this once; MCP startup never runs a full build.
+
+1. Check that both credential variables are set, without printing their values:
+
+   ```bash
+   test -n "$WQ_BRAIN_USERNAME" && test -n "$WQ_BRAIN_PASSWORD" && echo set
+   ```
+
+   If this does not print `set`, ask the user to export `WQ_BRAIN_USERNAME` and `WQ_BRAIN_PASSWORD` in their shell profile (and in the MCP client's `env` block, because GUI clients may not read the shell profile). Never ask for the password in chat, never echo it, and never write it to any file.
+
+2. Check login and API access (read-only; prints no secrets):
+
+   ```bash
+   uv run forum-rag sync-check
+   ```
+
+   Continue only when it reports `"status": "ok"`. `auth_failed`, `blocked` or `network_error` must be reported to the user, not retried in a loop.
+
+3. Run the full build once:
+
+   ```bash
+   uv run forum-rag sync --full --db .cache/forum.sqlite3
+   ```
+
+   It fetches every community post with its comments and all Help Center articles at about 3 requests per second, so it takes a long time. Run it in the background or with a generous timeout. If it is interrupted, run the same command again; posts whose comment count is unchanged are not refetched. Progress goes to stderr and the result JSON to stdout.
+
+4. Confirm with `uv run forum-rag sync-status --db .cache/forum.sqlite3`: `watermark_source` should be `sync` and `needs_full` should be `false`. Only a complete full run writes the watermark.
+
+After that, `forum-rag-mcp` keeps the index current by itself: on startup it runs a silent incremental sync in a background thread when the last successful sync is older than 3 days (`WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` or `forum-rag-mcp --sync-interval-days N`; `WQ_FORUM_RAG_AUTO_SYNC=0` disables it). Search keeps working during the sync. Help Center articles are stored as forum topics with community `Help Center / <category>`.
+
+Known limitation: incremental sync selects posts by `updated_at` and only fetches comments for those posts, so a new comment on a post whose `updated_at` did not change can be missed until the next `sync --full`. Incremental sync also never removes posts deleted online; only a complete `sync --full` without `--max-pages` or `--community` prunes them (topics referenced by knowledge pages are kept).
+
 ### Upgrading An Existing Install
 
 For an existing installation, synchronize the environment and inspect the selected index before reconnecting the client:
@@ -80,6 +114,10 @@ For Conda, activate the chosen environment, run `python -m pip install -e .`, an
 This upgrade uses the official MCP Python SDK 2.x; the separate `fastmcp` package is not required. Existing stdio commands and tool arguments remain compatible. Batch search additionally accepts optional `compact=True`.
 
 Do not delete or rebuild an existing forum index for a code upgrade. Only run `ingest-docs <dir>` when the user wants to add or update their own Markdown documentation. Its default pruning removes documents absent from that directory; use `--no-prune` if other imported documents must be retained. Do not re-run forum `refresh` unless source data actually needs updating.
+
+Version 0.3.0 adds forum sync from the Support API (`forum-rag sync`, `sync --full`, `sync --if-stale`, `sync-status`, `sync-check`) and a silent incremental sync at MCP startup (see "First-time forum build"). It adds no MCP tools: there are still 22. Auto sync needs `WQ_BRAIN_USERNAME` / `WQ_BRAIN_PASSWORD` in the MCP server's environment; without them startup skips the sync and everything else works as before. An existing database with an imported export already has a watermark, so no full build is needed after upgrading.
+
+Backup retention warning: before each sync that writes to an existing database, sync writes `<db dir>/backups/<db stem>-before-sync-<UTC time>.sqlite3` and keeps only the newest `--keep-backups` / `WQ_FORUM_RAG_KEEP_BACKUPS` files (default 1) matching `<db stem>-before-*.sqlite3`. The first sync after upgrading, including the silent one at MCP startup, therefore deletes older manual `forum-before-*.sqlite3` backups down to that count. Tell the user before the first sync if such backups exist and they may want to keep them.
 
 Restart or reconnect the MCP client after updating code/dependencies. The server does not hot-reload. Verify that 22 tools are visible; for an index that already contains official documents, `search_docs("neutralization")` and `get_doc("operators")` should work. Without imported documents, empty document results are expected and do not prove a transport failure. `doctor` checks local structure, not client connectivity or answer accuracy.
 
@@ -101,12 +139,16 @@ Compatible MCP clients can start the server with:
         "forum-rag-mcp"
       ],
       "env": {
-        "FORUM_RAG_DB": "/absolute/path/.cache/forum.sqlite3"
+        "FORUM_RAG_DB": "/absolute/path/.cache/forum.sqlite3",
+        "WQ_BRAIN_USERNAME": "<set by the user>",
+        "WQ_BRAIN_PASSWORD": "<set by the user>"
       }
     }
   }
 }
 ```
+
+The two `WQ_BRAIN_*` entries enable the silent startup sync; the user fills them in, never you. Optional settings in the same block: `WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` (default `3`), `WQ_FORUM_RAG_KEEP_BACKUPS` (default `1`) and `WQ_FORUM_RAG_AUTO_SYNC` (`0` disables the startup sync).
 
 For a Conda installation, do not assume the MCP client will run `conda activate`. Prefer the environment's absolute executable path:
 
@@ -134,7 +176,7 @@ The SQLite database contains **three independent layers**. Keep them straight:
 
 | Layer | Tables | MCP search tool | Trust | Origin |
 | --- | --- | --- | --- | --- |
-| Raw forum evidence | `topics` / `chunks` | `search_forum` | Medium (user discussion) | Platform JSON export |
+| Raw forum evidence | `topics` / `chunks` | `search_forum` | Medium (user discussion) | Platform JSON export or Support API sync |
 | Compiled knowledge | `knowledge_pages` / `knowledge_sources` / `knowledge_links` | `search_knowledge` | Medium (AI-distilled, must cite sources) | Produced by you via `propose_knowledge_page` |
 | Official docs | `documents` / `doc_chunks` | `search_docs` | High (authoritative reference) | Markdown files in the user's own docs directory, not committed |
 
@@ -331,7 +373,8 @@ Follow these boundaries:
 - Do not use high confidence for inferred, weak, or single-fragment claims.
 - Do not auto-resolve contradictions; represent them with `conflicts_with`. Do not treat hash embeddings as model-level semantic retrieval. Empty search results are valid; errors are not evidence of absence.
 - Do not call commit-style ingestion unless mutation is intended.
-- Do not assume the system has background ingestion or external LLM calls.
+- The only background ingestion is a silent incremental forum sync at MCP startup when the last sync is older than the threshold. It never runs a full build. The system makes no external LLM calls.
+- Never print, log or store WQ_BRAIN_PASSWORD, cookies or tokens.
 - Do not treat draft knowledge as authoritative.
 
 ## When To Rebuild Or Export

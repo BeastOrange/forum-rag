@@ -833,7 +833,7 @@ def test_server_reports_package_version() -> None:
 
     server = build_mcp_server()
     assert server.version == __version__
-    assert __version__ == "0.2.0"
+    assert __version__ == "0.3.0"
 
 
 def test_domain_errors_surface_their_reason(tmp_path: Path) -> None:

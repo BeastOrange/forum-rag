@@ -128,13 +128,59 @@ Conda 环境中运行：
 python -m pip install -e ".[local-embeddings]"
 ```
 
+### 4. 自动同步论坛（v0.3.0）
+
+从 0.3.0 起，可以直接用自己的 BRAIN 帐号从 Support 社区 API 拉取论坛帖、评论和 Help Center 文章，写入同一个 SQLite，不再需要先导出 JSON。
+
+**凭据。** 设置两个环境变量 `WQ_BRAIN_USERNAME` 和 `WQ_BRAIN_PASSWORD`，可以写进 shell profile（例如 `~/.zshrc`），也可以写进 MCP 客户端配置的 `env` 块。图形化 MCP 客户端往往不会读取 shell profile，这种情况下请在 `env` 块中配置。不要把凭据提交到 Git。密码只用于调用 BRAIN 登录接口，不会写入日志、数据库或任何文件，登录 cookie 也只保存在进程内存中。
+
+```bash
+uv run forum-rag sync-check   # 只读检查：登录、Support 会话、取一页帖子；不输出凭据
+```
+
+**首次全量构建。** 本地还没有论坛数据，或者希望做一次完整校准时，手动运行：
+
+```bash
+uv run forum-rag sync --full
+uv run forum-rag sync-status
+```
+
+全量构建会抓取所有社区帖子及评论和全部 Help Center 文章，请求速率约为每秒 3 次，耗时较长。中途中断后重新运行即可续上：评论数没变的帖子不会重复请求评论。只有完整跑完的全量构建才会写入同步水位线，可以用 `sync-status` 确认。
+
+**自动同步。** `forum-rag-mcp` 启动时会在后台线程静默运行一次增量同步，不阻塞 MCP 服务，同步期间检索照常可用。触发条件同时满足以下几点：
+
+- 数据库文件已存在，并且已有同步水位线（完成过 `sync --full`）或导入过论坛导出；
+- 已设置两个凭据环境变量；
+- 距离上次成功同步超过阈值，默认 3 天。
+
+阈值可通过环境变量 `WQ_FORUM_RAG_SYNC_INTERVAL_DAYS` 或启动参数 `forum-rag-mcp --sync-interval-days N` 修改（启动参数优先）。设置 `WQ_FORUM_RAG_AUTO_SYNC=0` 关闭自动同步。启动时永远不会做全量构建：没有数据库或没有水位线时只会跳过。同步日志只写到 stderr。
+
+**手动命令。**
+
+| 目的 | 命令 |
+| --- | --- |
+| 增量同步（从水位线前 2 小时开始） | `uv run forum-rag sync` |
+| 全量同步并清理线上已删除的帖子 | `uv run forum-rag sync --full` |
+| 仅在超过阈值时同步 | `uv run forum-rag sync --if-stale --sync-interval-days 3` |
+| 查看水位线、上次结果和备份 | `uv run forum-rag sync-status` |
+| 只读检查登录与 API | `uv run forum-rag sync-check` |
+
+**备份。** 每次同步写入已有数据库前，会先在 `<数据库目录>/backups` 下用 SQLite 备份接口生成 `<库名>-before-sync-<UTC时间>.sqlite3`。默认只保留 1 份，可用 `--keep-backups N` 或 `WQ_FORUM_RAG_KEEP_BACKUPS` 修改，`0` 表示不备份并删除已有备份。保留规则匹配所有 `<库名>-before-*.sqlite3`，所以升级后的第一次同步（包括 MCP 启动时的静默同步）会把以前手动留下的 `forum-before-*.sqlite3` 删到只剩保留数量。需要保留旧备份时，请先把它们移出该目录，或调大保留数量。磁盘峰值约为数据库本身加上保留份数的备份。
+
+**存储。** API 返回的数据按页处理后直接写库，不生成中间导出文件；唯一的临时文件是备份过程中的 `.partial`，成功后改名，失败时删除。Help Center 文章作为论坛主题存储，社区名为 `Help Center / <分类>`，可以用 `search` / `show` 检索。
+
+**已知限制。**
+
+- 增量同步按帖子的 `updated_at` 倒序挑选帖子，只为这些帖子拉取评论。如果某个帖子有了新评论但 `updated_at` 没变，这条评论可能要等到下一次 `sync --full` 才会入库。规划阶段的抽样检查中，帖子的 `updated_at` 都不早于其最新评论，但 `updated_at` 也会因为评论以外的原因变化，所以这不能证明新评论一定会更新它。
+- 增量同步不会删除线上已删除的帖子；只有不加 `--max-pages` / `--community` 且完整跑完的 `sync --full` 才会清理。被知识页引用的帖子始终保留。
+
 ## 数据、分发与边界
 
 | 内容 | 是否随仓库提供 | 用途与获取方式 |
 | --- | --- | --- |
 | 代码、测试、`pyproject.toml` | ✅ | `git clone` 即可获得。 |
 | 你自己的 Markdown 文档目录（示例为 `Documents/`） | ❌ | 由你自行准备并保管，执行 `ingest-docs <目录>` 摄入。平台官方文档不随仓库分发。 |
-| 论坛 SQLite（例如 `.cache/forum.sqlite3`） | ❌ | 由每位用户使用自己的平台帐号导出 JSON 后，在本地运行 `refresh` / `index` 建立。 |
+| 论坛 SQLite（例如 `.cache/forum.sqlite3`） | ❌ | 由每位用户用自己的平台帐号在本地建立：运行 `sync --full` 从 Support API 拉取，或导出 JSON 后运行 `refresh` / `index`。 |
 
 最小交付物是：**本仓库源码 + 你自己的 Markdown 文档目录 + 你自己的论坛 JSON**。仓库不附带平台官方文档，`Documents/` 已被 Git 忽略，首次使用需执行 `ingest-docs <你的目录>`。
 
@@ -150,6 +196,7 @@ python -m pip install -e ".[local-embeddings]"
 ```
 
 - **论坛索引：** 解析 community、topic、author、时间、投票/评论等轻量元数据，并从 HTML 清洗正文文本。
+- **API 同步：** `sync --full` 从 Support API 全量建库；`forum-rag-mcp` 启动时按阈值（默认 3 天）在后台增量同步，按页写入并只重建变更帖子的 FTS 行，检索不中断。
 - **增量更新：** `index` 会根据源 JSON 的路径、mtime 与 size 跳过未变更文件；替换导出或需要强制刷新时使用 `--rebuild`。`refresh` 则把论坛索引和来源 manifest 提交组合为一步。
 - **精确/近邻查询：** `find_by_exact` 面向 topic id、URL、标题、正文、评论与 chunk 的精确词命中；`related_posts` 基于标题寻找同社区相关主题。
 
@@ -181,6 +228,9 @@ uv run forum-rag index \
 | 搜索 / 查看论坛 | `uv run forum-rag search "query"` · `uv run forum-rag show TOPIC_ID` |
 | 搜索 / 查看官方文档 | `uv run forum-rag search-docs "query"` · `uv run forum-rag show-doc SLUG` |
 | 文档入库 | `uv run forum-rag ingest-docs <目录>` |
+| 同步论坛（增量 / 全量） | `uv run forum-rag sync` · `uv run forum-rag sync --full` |
+| 按阈值同步 / 查看同步状态 | `uv run forum-rag sync --if-stale` · `uv run forum-rag sync-status` |
+| 检查 BRAIN 登录与 API | `uv run forum-rag sync-check` |
 | 重建 FTS5 索引 | `uv run forum-rag search-reindex` |
 | 查看论坛来源差异 | `uv run forum-rag source-status ./notes` · `uv run forum-rag source-ingest-plan ./notes --commit` |
 | 使用知识层 | `uv run forum-rag <command>`，其中 `<command>` 为 `evolve-context`、`knowledge-search`、`knowledge-show`、`knowledge-lint`、`knowledge-graph` 或 `knowledge-export` |
@@ -355,6 +405,8 @@ uv run forum-rag doctor --db .cache/forum.sqlite3
 
 Conda 环境中执行 `python -m pip install -e .`，再运行 `forum-rag doctor --db .cache/forum.sqlite3`。只有需要新增或更新仓库文档时，才另外执行 `ingest-docs <目录>`；已有论坛数据不需要重新 `refresh`，也不要删除数据库。如果索引还含其他目录导入的文档，摄入时可加 `--no-prune`，保留目录外文档。
 
+升级到 0.3.0 后新增论坛自动同步（见“自动同步论坛”一节），没有新增 MCP 工具，重启后仍是 22 个。若要启用，请在 shell profile 或 MCP 客户端 `env` 块中设置 `WQ_BRAIN_USERNAME` / `WQ_BRAIN_PASSWORD`；未设置时 MCP 启动会跳过同步，其他功能不受影响。注意：升级后的第一次同步会按保留数量（默认 1）清理 `<数据库目录>/backups` 下旧的 `forum-before-*.sqlite3`，需要的旧备份请提前移走。
+
 然后重启或重新连接 MCP 客户端。服务进程不会热重载代码；重启后应发现 22 个工具。已摄入官方文档时，可调用 `search_docs("neutralization")`、`get_doc("operators")`；有论坛数据时再验证 `search_forum_batch`。工具不可见时，检查客户端是否仍指向旧环境或错误的仓库目录。
 
 如果运行过独立语义检索实验，`search_semantic_forum` 和模型准备、建索引命令已不在当前接口中。改用 `search_forum_batch` 传入中英文查询；既有论坛 SQLite 不依赖实验模型文件。
@@ -377,10 +429,10 @@ uv run python scripts/run_bounded_task.py \
 
 ## 当前范围与后续方向
 
-已实现：本地 JSON 解析、SQLite 原帖与 chunk 索引、Markdown 文档摄入、FTS5 词法检索、双语批量查询与可定位证据、来源 manifest、知识页与来源绑定、typed graph、Wiki 导出、backlink boost 与 embedding cache。
+已实现：Support API 全量同步（`sync --full`）与 MCP 启动时按阈值的后台增量同步、本地 JSON 解析、SQLite 原帖与 chunk 索引、Markdown 文档摄入、FTS5 词法检索、双语批量查询与可定位证据、来源 manifest、知识页与来源绑定、typed graph、Wiki 导出、backlink boost 与 embedding cache。
 
 已知限制：旧库中文 LIKE 回退仍可能全表扫描，冷请求或复杂查询可能超时；可选中文索引尚未证明整体质量收益，默认关闭。并发保护目前覆盖 MCP 批量检索和证据读取，不代表全部同步工具都有统一限流。
 
-暂未实现：真人标注的完整准确率评测、PDF/截图/音频/视频等多模态摄入、定时或 always-on ingestion、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
+暂未实现：真人标注的完整准确率评测、PDF/截图/音频/视频等多模态摄入、常驻后台的定时同步进程（目前只在 MCP 启动时检查一次）、由 LLM 自动识别矛盾，以及外部向量数据库或 seekdb 类服务化基础设施。查询日志驱动补采仍是后续方向；不能把搜索片段拼成完整原文，也不能按零访问量自动淘汰知识。
 
 对外 CLI / MCP contract 与内部 `parser`、`storage`、`search` 模块解耦；后续替换 embedding backend 或调优 chunk/search 策略，不应改变既有 CLI/MCP 接口。
